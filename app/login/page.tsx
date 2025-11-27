@@ -12,7 +12,7 @@ import { useState } from 'react'
 function SubmitButton() {
   const { pending } = useFormStatus()
   return (
-    <Button className="w-full" type="submit" disabled={pending}>
+    <Button className="w-full hover:cursor-pointer" type="submit" disabled={pending}>
       {pending ? 'Signing in...' : 'Sign In'}
     </Button>
   )
