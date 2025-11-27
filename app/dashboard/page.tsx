@@ -1,12 +1,35 @@
 import { getDashboardData } from './actions'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Calendar, Clock, Pill, Plus, User } from 'lucide-react'
+import { Calendar, Clock, Pill, Plus } from 'lucide-react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ booked?: string }> }) {
-  const { appointments, prescriptions, user } = await getDashboardData()
+  type Appointment = {
+    id: string
+    date: string
+    status: string
+    doctors: { name: string; specialty: string; image_url?: string }
+  }
+
+  type Prescription = {
+    id: string
+    medication_name: string
+    dosage: string
+  }
+
+  type DashboardUser = {
+    user_metadata: {
+      full_name?: string
+    }
+  }
+
+  const { appointments, prescriptions, user }: {
+    appointments: Appointment[]
+    prescriptions: Prescription[]
+    user: DashboardUser | null
+  } = await getDashboardData()
 
   if (!user) {
     redirect('/login')
@@ -27,7 +50,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-blue-900">Welcome back, {user.user_metadata.full_name}</h1>
-          <p className="text-gray-600">Here's an overview of your health journey.</p>
+          <p className="text-gray-600">Here is an overview of your health journey.</p>
         </div>
         <Link href="/book">
           <Button className="bg-blue-600 hover:bg-blue-700">
@@ -57,7 +80,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </Card>
           ) : (
             <div className="space-y-4">
-              {appointments.map((apt: any) => (
+              {appointments.map((apt) => (
                 <Card key={apt.id} className="overflow-hidden">
                   <div className="flex flex-col sm:flex-row">
                     <div className="bg-blue-50 p-6 flex flex-col items-center justify-center min-w-[120px] border-b sm:border-b-0 sm:border-r border-blue-100">
@@ -108,7 +131,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </Card>
           ) : (
             <div className="space-y-4">
-              {prescriptions.map((script: any) => (
+              {prescriptions.map((script) => (
                 <Card key={script.id}>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base font-bold">{script.medication_name}</CardTitle>
