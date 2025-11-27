@@ -3,6 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { buildSanitizedPrompt } from '@/utils/ai/redactor'
 import { revalidatePath } from 'next/cache'
+import { GoogleGenAI } from '@google/genai'
 
 type QuickActionIntent = 'prescription' | 'previsit' | 'next_steps'
 
@@ -11,33 +12,18 @@ async function callGeminiModel(prompt: string) {
 
   if (!apiKey) return null
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [{ text: prompt }],
-          },
-        ],
-      }),
-    }
-  )
+  try {
+    const ai = new GoogleGenAI({ apiKey })
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: prompt,
+    })
 
-  if (!response.ok) {
-    const message = await response.text()
-    throw new Error(message || 'Gemini generation failed')
+    return response.text?.trim() || null
+  } catch (error) {
+    console.error('Gemini API error:', error)
+    throw error
   }
-
-  const payload = await response.json()
-  const candidate = payload?.candidates?.[0]
-  const text = candidate?.content?.parts?.map((part: { text: string }) => part.text).join('\n')
-
-  return text?.trim() || null
 }
 
 function craftSummary(intent: QuickActionIntent, sanitizedContext: string) {
@@ -51,6 +37,37 @@ function craftSummary(intent: QuickActionIntent, sanitizedContext: string) {
     'This guidance is AI-generated and should be reviewed with your care team before making medical decisions.'
 
   return `${headers[intent]}\n\n${sanitizedContext}\n\n${closingNotes}`
+}
+
+function buildPromptForIntent(intent: QuickActionIntent, sanitizedContext: string) {
+  const systemPrompts: Record<QuickActionIntent, string> = {
+    prescription: `You are a helpful medical assistant. Based on the patient's context below, provide clear guidance about their prescription medications. Include:
+- Purpose of each medication
+- Proper timing and dosage reminders
+- Common side effects to watch for
+- Drug interaction warnings if applicable
+Keep the response concise and patient-friendly.`,
+    previsit: `You are a helpful medical assistant preparing a patient for their upcoming consultation. Based on the context below, create a structured symptom summary that includes:
+- Main concerns and symptoms
+- Duration and severity
+- Relevant medical history mentioned
+- Questions the patient should ask their doctor
+Keep it organized and easy for both patient and doctor to review.`,
+    next_steps: `You are a helpful medical assistant. Based on the consultation context below, create a clear follow-up action plan that includes:
+- Key takeaways from the visit
+- Medications or treatments to follow
+- Lifestyle recommendations if any
+- When to schedule follow-up appointments
+- Warning signs that require immediate attention
+Keep the response actionable and easy to follow.`,
+  }
+
+  return `${systemPrompts[intent]}
+
+Patient Context (sanitized for privacy):
+${sanitizedContext}
+
+Please provide your guidance:`
 }
 
 export async function generateGeminiSummary(params: {
@@ -67,7 +84,7 @@ export async function generateGeminiSummary(params: {
     return { error: 'You must be signed in to use AI assistance.' }
   }
 
-  const { sanitizedContext, prompt } = buildSanitizedPrompt({
+  const { sanitizedContext } = buildSanitizedPrompt({
     intent: params.intent,
     context: params.context,
     identifiers: {
@@ -77,6 +94,7 @@ export async function generateGeminiSummary(params: {
     },
   })
 
+  const prompt = buildPromptForIntent(params.intent, sanitizedContext)
   let summary = craftSummary(params.intent, sanitizedContext)
 
   try {
@@ -84,31 +102,6 @@ export async function generateGeminiSummary(params: {
     summary = aiDraft || summary
   } catch (error) {
     console.error('Gemini generation failed, using fallback template', error)
-  }
-
-  const documentInsert = await supabase.from('documents').insert({
-    patient_id: user.id,
-    title: `Gemini ${params.intent} note`,
-    content: summary,
-    doc_type: 'ai_summary',
-    appointment_id: params.appointmentId || null,
-    prompt,
-  })
-
-  if (documentInsert.error) {
-    return { error: documentInsert.error.message }
-  }
-
-  const consultNoteInsert = await supabase.from('consultation_notes').insert({
-    patient_id: user.id,
-    appointment_id: params.appointmentId || null,
-    summary,
-    note_type: params.intent,
-    prompt,
-  })
-
-  if (consultNoteInsert.error) {
-    return { error: consultNoteInsert.error.message }
   }
 
   revalidatePath('/dashboard')
