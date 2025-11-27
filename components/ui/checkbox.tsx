@@ -5,24 +5,28 @@ import { cn } from "@/lib/utils"
 export type CheckboxProps = React.InputHTMLAttributes<HTMLInputElement>
 
 const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
-  ({ className, ...props }, ref) => {
+  ({ className, checked, ...props }, ref) => {
     return (
-      <label className="inline-flex items-center gap-2 cursor-pointer">
+      <div className="relative inline-flex items-center">
         <input
           type="checkbox"
           ref={ref}
-          className={cn(
-            "h-4 w-4 rounded border border-gray-300 text-blue-600 focus:ring-blue-500",
-            "focus:outline-none focus:ring-2 focus:ring-offset-2",
-            className
-          )}
+          checked={checked}
+          className="sr-only peer"
           {...props}
         />
-        <span className="sr-only">Toggle option</span>
-        <span className="pointer-events-none">
-          <Check className="h-4 w-4 text-transparent" />
-        </span>
-      </label>
+        <div
+          className={cn(
+            "h-5 w-5 rounded border-2 flex items-center justify-center transition-colors hover:cursor-pointer",
+            checked
+              ? "bg-blue-600 border-blue-600"
+              : "bg-white border-gray-300 hover:border-blue-400",
+            className
+          )}
+        >
+          {checked && <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} />}
+        </div>
+      </div>
     )
   }
 )
