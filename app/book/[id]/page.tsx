@@ -1,9 +1,11 @@
+/* eslint-disable @next/next/no-img-element */
 import { getDoctorById } from '../actions'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import BookingForm from './booking-form'
+import Image from 'next/image'
 
-export default async function BookingPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export default async function BookingPage({ params }: { params: { id: string } }) {
+  const { id } = params
   const doctor = await getDoctorById(id)
 
   if (!doctor) {
@@ -17,15 +19,17 @@ export default async function BookingPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-2xl">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-4 mb-4">
-             {/* eslint-disable-next-line @next/next/no-img-element */}
-             <img
-                src={doctor.image_url || 'https://placehold.co/100x100?text=Dr'}
-                alt={doctor.name}
-                className="w-16 h-16 rounded-full object-cover border-2 border-blue-100"
-              />
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-4 mb-4">
+            <Image
+              src={doctor.image_url || 'https://placehold.co/100x100?text=Dr'}
+              alt={doctor.name}
+              width={64}
+              height={64}
+              className="rounded-full object-cover border-2 border-blue-100"
+              priority
+            />
             <div>
               <CardTitle className="text-2xl">Book with {doctor.name}</CardTitle>
               <CardDescription className="text-blue-600 font-medium">{doctor.specialty}</CardDescription>

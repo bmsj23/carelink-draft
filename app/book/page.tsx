@@ -1,7 +1,9 @@
 import { getDoctors } from './actions'
+/* eslint-disable @next/next/no-img-element */
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import Image from 'next/image'
 
 export default async function BookPage() {
   const doctors = await getDoctors()
@@ -14,11 +16,13 @@ export default async function BookPage() {
         {doctors.map((doctor) => (
           <Card key={doctor.id} className="overflow-hidden hover:shadow-lg transition-shadow">
             <div className="h-48 bg-gray-200 relative">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <Image
                 src={doctor.image_url || 'https://placehold.co/600x400?text=Doctor'}
                 alt={doctor.name}
-                className="w-full h-full object-cover"
+                fill
+                sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
+                className="object-cover"
+                priority={false}
               />
             </div>
             <CardHeader>
