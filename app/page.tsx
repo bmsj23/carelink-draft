@@ -21,7 +21,7 @@ export default function Home() {
 
           <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-slate-900 leading-tight">
             Medical Services You <br/>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">
+            <span className="text-blue-600">
               Can Rely On
             </span>
           </h1>
@@ -32,13 +32,13 @@ export default function Home() {
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center pt-8">
             <Link href="/signup">
-              <Button size="lg" className="rounded-full bg-blue-600 hover:bg-blue-700 h-14 px-10 text-lg shadow-xl shadow-blue-200 transition-all hover:scale-105">
+              <Button size="lg" className="rounded-full bg-blue-600 hover:bg-blue-700 h-14 px-10 text-lg shadow-xl shadow-blue-200 transition-all hover:scale-105 hover:cursor-pointer">
                 Get Started Now
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
             <Link href="/book">
-              <Button variant="outline" size="lg" className="rounded-full border-2 border-slate-200 hover:border-blue-600 hover:bg-blue-50 h-14 px-10 text-lg transition-all">
+              <Button variant="outline" size="lg" className="rounded-full border-2 border-slate-200 hover:border-blue-600 hover:bg-blue-50 h-14 px-10 text-lg transition-all hover:cursor-pointer">
                 Book Appointment
               </Button>
             </Link>
@@ -141,7 +141,7 @@ export default function Home() {
               <p className="text-xl text-blue-100">Join thousands of users who trust CareLink for their medical needs.</p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Link href="/signup">
-                  <Button size="lg" className="rounded-full bg-white text-blue-600 hover:bg-blue-50 h-14 px-10 text-lg font-bold shadow-lg">
+                  <Button size="lg" className="rounded-full bg-white text-blue-600 hover:bg-blue-50 h-14 px-10 text-lg font-bold shadow-lg hover:cursor-pointer">
                     Create Free Account
                   </Button>
                 </Link>
