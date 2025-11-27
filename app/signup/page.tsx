@@ -12,14 +12,27 @@ import { useState } from 'react'
 function SubmitButton() {
   const { pending } = useFormStatus()
   return (
-    <Button className="w-full" type="submit" disabled={pending}>
+    <Button className="w-full hover:cursor-pointer" type="submit" disabled={pending}>
       {pending ? 'Creating account...' : 'Create Account'}
     </Button>
   )
 }
 
+const specialties = [
+  'General Medicine',
+  'Cardiology',
+  'Dermatology',
+  'Pediatrics',
+  'Psychiatry',
+  'Orthopedics',
+  'Neurology',
+  'Ophthalmology',
+  'Dentistry',
+]
+
 export default function SignupPage() {
   const [error, setError] = useState<string | null>(null)
+  const [role, setRole] = useState<'patient' | 'doctor'>('patient')
 
   async function handleSubmit(formData: FormData) {
     const res = await signup(formData)
@@ -54,19 +67,59 @@ export default function SignupPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" name="password" type="password" required />
+              <Input id="password" name="password" type="password" required minLength={6} />
             </div>
-            {/* Hidden role field, default to patient for now.
-                In a real app, we might let them choose or have separate flows.
-                For hackathon, maybe a simple dropdown if we want to test Doctor view.
-            */}
-            <input type="hidden" name="role" value="patient" />
+            <div className="space-y-2">
+              <Label>I am a</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setRole('patient')}
+                  className={`p-3 rounded-lg border-2 text-center transition-all hover:cursor-pointer ${
+                    role === 'patient'
+                      ? 'border-blue-600 bg-blue-50 text-blue-700'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="font-semibold">Patient</div>
+                  <div className="text-xs text-gray-500">Book appointments</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRole('doctor')}
+                  className={`p-3 rounded-lg border-2 text-center transition-all hover:cursor-pointer ${
+                    role === 'doctor'
+                      ? 'border-blue-600 bg-blue-50 text-blue-700'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="font-semibold">Doctor</div>
+                  <div className="text-xs text-gray-500">Manage patients</div>
+                </button>
+              </div>
+            </div>
+            {role === 'doctor' && (
+              <div className="space-y-2">
+                <Label htmlFor="specialty">Specialty</Label>
+                <select
+                  id="specialty"
+                  name="specialty"
+                  className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  {specialties.map((spec) => (
+                    <option key={spec} value={spec}>{spec}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <input type="hidden" name="role" value={role} />
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
             <SubmitButton />
             <div className="text-sm text-center text-gray-500">
               Already have an account?{' '}
-              <Link href="/login" className="text-blue-600 hover:underline">
+              <Link href="/login" className="text-blue-600 hover:underline hover:cursor-pointer">
                 Sign in
               </Link>
             </div>
