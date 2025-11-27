@@ -1,19 +1,41 @@
 import { getDashboardData } from './actions'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Calendar, Clock, Pill, Plus, User } from 'lucide-react'
+import { Calendar, Clock, Pill, Plus, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { AiFollowUpPanel } from './ai-follow-up'
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ booked?: string }> }) {
+type Appointment = {
+  id: string
+  date: string
+  status: 'pending' | 'confirmed' | 'completed' | 'cancelled'
+  notes?: string | null
+  doctors: { name: string; specialty: string; image_url?: string }
+}
+
+type Prescription = {
+  id: string
+  medication_name: string
+  dosage: string
+  status: string
+}
+
+export default async function DashboardPage({ searchParams }: { searchParams: { booked?: string } }) {
   const { appointments, prescriptions, user } = await getDashboardData()
 
   if (!user) {
     redirect('/login')
   }
 
-  const { booked } = await searchParams
+  const { booked } = searchParams
   const showSuccess = booked === 'true'
+  const typedAppointments = (appointments as Appointment[]) || []
+  const typedPrescriptions = (prescriptions as Prescription[]) || []
+  const sortedAppointments = [...typedAppointments].sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+  )
+  const mostRecentAppointment = sortedAppointments[0]
 
   return (
     <div className="container mx-auto py-8 px-4 space-y-8">
@@ -27,7 +49,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-blue-900">Welcome back, {user.user_metadata.full_name}</h1>
-          <p className="text-gray-600">Here's an overview of your health journey.</p>
+          <p className="text-gray-600">Here’s an overview of your health journey.</p>
         </div>
         <Link href="/book">
           <Button className="bg-blue-600 hover:bg-blue-700">
@@ -45,20 +67,20 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             Upcoming Appointments
           </h2>
 
-          {appointments.length === 0 ? (
-            <Card className="bg-gray-50 border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                <Calendar className="h-12 w-12 text-gray-300 mb-4" />
-                <p className="text-gray-500 mb-4">No upcoming appointments</p>
+            {typedAppointments.length === 0 ? (
+              <Card className="bg-gray-50 border-dashed">
+                <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                  <Calendar className="h-12 w-12 text-gray-300 mb-4" />
+                  <p className="text-gray-500 mb-4">No upcoming appointments</p>
                 <Link href="/book">
                   <Button variant="outline">Find a Doctor</Button>
                 </Link>
               </CardContent>
             </Card>
-          ) : (
-            <div className="space-y-4">
-              {appointments.map((apt: any) => (
-                <Card key={apt.id} className="overflow-hidden">
+            ) : (
+              <div className="space-y-4">
+                {typedAppointments.map((apt) => (
+                  <Card key={apt.id} className="overflow-hidden">
                   <div className="flex flex-col sm:flex-row">
                     <div className="bg-blue-50 p-6 flex flex-col items-center justify-center min-w-[120px] border-b sm:border-b-0 sm:border-r border-blue-100">
                       <span className="text-3xl font-bold text-blue-600">
@@ -99,16 +121,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             Active Prescriptions
           </h2>
 
-          {prescriptions.length === 0 ? (
-            <Card className="bg-gray-50 border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-8 text-center">
-                <Pill className="h-10 w-10 text-gray-300 mb-3" />
-                <p className="text-sm text-gray-500">No active prescriptions</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-4">
-              {prescriptions.map((script: any) => (
+            {typedPrescriptions.length === 0 ? (
+              <Card className="bg-gray-50 border-dashed">
+                <CardContent className="flex flex-col items-center justify-center py-8 text-center">
+                  <Pill className="h-10 w-10 text-gray-300 mb-3" />
+                  <p className="text-sm text-gray-500">No active prescriptions</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-4">
+                {typedPrescriptions.map((script) => (
                 <Card key={script.id}>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base font-bold">{script.medication_name}</CardTitle>
@@ -142,6 +164,26 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </Card>
         </div>
       </div>
-    </div>
+
+      <div className="space-y-4">
+        <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-blue-600" />
+          Post-consult AI quick actions
+        </h2>
+        <AiFollowUpPanel
+            appointment={
+              mostRecentAppointment
+                ? {
+                    id: mostRecentAppointment.id,
+                    doctorName: mostRecentAppointment.doctors?.name,
+                    notes: mostRecentAppointment.notes,
+                    date: mostRecentAppointment.date,
+                  }
+                : undefined
+            }
+            prescriptions={typedPrescriptions}
+          />
+        </div>
+      </div>
   )
 }

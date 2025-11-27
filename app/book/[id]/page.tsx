@@ -17,9 +17,10 @@ export default async function BookingPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-2xl">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-4 mb-4">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-4 mb-4">
+             {/* eslint-disable-next-line @next/next/no-img-element */}
              <img
                 src={doctor.image_url || 'https://placehold.co/100x100?text=Dr'}
                 alt={doctor.name}
