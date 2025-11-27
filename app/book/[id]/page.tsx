@@ -1,21 +1,20 @@
-/* eslint-disable @next/next/no-img-element */
 import { getDoctorById } from '../actions'
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import BookingForm from './booking-form'
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import Image from 'next/image'
+import { redirect } from 'next/navigation'
 
-export default async function BookingPage({ params }: { params: { id: string } }) {
-  const { id } = params
-  const doctor = await getDoctorById(id)
+export default async function BookingPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = await params
+  const doctor = await getDoctorById(resolvedParams.id)
 
   if (!doctor) {
-    return <div>Doctor not found</div>
+    redirect('/book')
   }
 
-  // Calculate tomorrow's date for min attribute
-  const tomorrow = new Date()
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  const minDate = tomorrow.toISOString().split('T')[0]
+  const minDate = new Date()
+  minDate.setHours(0, 0, 0, 0)
+  const minDateStr = minDate.toISOString().split('T')[0]
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-2xl">
@@ -39,7 +38,7 @@ export default async function BookingPage({ params }: { params: { id: string } }
             Complete the form below to schedule your consultation.
           </CardDescription>
         </CardHeader>
-        <BookingForm doctorId={doctor.id} minDate={minDate} />
+        <BookingForm doctorId={doctor.id} minDate={minDateStr} />
       </Card>
     </div>
   )

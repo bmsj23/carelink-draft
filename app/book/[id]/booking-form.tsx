@@ -14,7 +14,7 @@ import { toast } from 'sonner'
 function SubmitButton() {
   const { pending } = useFormStatus()
   return (
-    <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 size-lg" disabled={pending}>
+    <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 size-lg hover:cursor-pointer" disabled={pending}>
       {pending ? 'Booking...' : 'Confirm Appointment'}
     </Button>
   )

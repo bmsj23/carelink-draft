@@ -1,9 +1,18 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
-import { revalidatePath, revalidateTag } from 'next/cache'
+import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
+
+export type Doctor = {
+  id: string
+  name: string
+  specialty: string
+  bio: string | null
+  image_url: string | null
+  created_at: string
+}
 
 const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
   ? new URL(process.env.NEXT_PUBLIC_SITE_URL).toString().replace(/\/$/, '')
@@ -16,7 +25,7 @@ const createAppointmentSchema = z.object({
   notes: z.string().min(5, 'Please add a brief note about your visit.'),
 })
 
-export async function getDoctors() {
+export async function getDoctors(): Promise<Doctor[]> {
   const response = await fetch(`${baseUrl}/api/doctors`, {
     next: { revalidate: 3600, tags: ['doctors'] },
   })
@@ -96,6 +105,5 @@ export async function createAppointment(formData: FormData) {
 }
 
 export async function revalidateDoctors() {
-  revalidateTag('doctors')
   revalidatePath('/book')
 }
