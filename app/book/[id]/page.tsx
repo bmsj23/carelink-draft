@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 import { getDoctorById } from '../actions'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import BookingForm from './booking-form'

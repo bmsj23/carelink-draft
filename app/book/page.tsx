@@ -1,4 +1,5 @@
 import { getDoctors } from './actions'
+/* eslint-disable @next/next/no-img-element */
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
