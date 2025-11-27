@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { AiFollowUpPanel } from './ai-follow-up'
 
 type SearchParams = {
   booked?: string
