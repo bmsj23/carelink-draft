@@ -1,49 +1,68 @@
 import { getDoctors } from './actions'
-/* eslint-disable @next/next/no-img-element */
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import Image from 'next/image'
+import { Search, Stethoscope } from 'lucide-react'
 
 export default async function BookPage() {
   const doctors = await getDoctors()
 
   return (
     <div className="container mx-auto py-8 px-4">
-      <h1 className="text-3xl font-bold text-blue-900 mb-8">Find a Specialist</h1>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {doctors.map((doctor) => (
-          <Card key={doctor.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-            <div className="h-48 bg-gray-200 relative">
-              <Image
-                src={doctor.image_url || 'https://placehold.co/600x400?text=Doctor'}
-                alt={doctor.name}
-                fill
-                sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
-                className="object-cover"
-                priority={false}
-              />
-            </div>
-            <CardHeader>
-              <div className="text-sm font-medium text-blue-600 mb-1">{doctor.specialty}</div>
-              <CardTitle className="text-xl">{doctor.name}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-gray-600 line-clamp-3 text-sm">
-                {doctor.bio}
-              </p>
-            </CardContent>
-            <CardFooter>
-              <Link href={`/book/${doctor.id}`} className="w-full">
-                <Button className="w-full bg-blue-600 hover:bg-blue-700">
-                  Book Appointment
-                </Button>
-              </Link>
-            </CardFooter>
-          </Card>
-        ))}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-blue-900">Find a Specialist</h1>
+          <p className="text-gray-600 mt-1">Book an appointment with our trusted healthcare professionals</p>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <Stethoscope className="h-4 w-4" />
+          <span>{doctors.length} doctors available</span>
+        </div>
       </div>
+
+      {doctors.length === 0 ? (
+        <Card className="bg-gray-50 border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <Search className="h-12 w-12 text-gray-300 mb-4" />
+            <p className="text-gray-500 mb-2">No doctors available at the moment</p>
+            <p className="text-sm text-gray-400">Please check back later</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {doctors.map((doctor) => (
+            <Card key={doctor.id} className="overflow-hidden hover:shadow-lg transition-shadow group">
+              <div className="h-48 bg-gray-200 relative overflow-hidden">
+                <Image
+                  src={doctor.image_url || 'https://placehold.co/600x400?text=Doctor'}
+                  alt={doctor.name}
+                  fill
+                  sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
+                  className="object-cover group-hover:scale-105 transition-transform duration-300"
+                  priority={false}
+                />
+              </div>
+              <CardHeader>
+                <div className="text-sm font-medium text-blue-600 mb-1">{doctor.specialty}</div>
+                <CardTitle className="text-xl">{doctor.name}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 line-clamp-3 text-sm">
+                  {doctor.bio || 'Experienced healthcare professional dedicated to providing excellent patient care.'}
+                </p>
+              </CardContent>
+              <CardFooter>
+                <Link href={`/book/${doctor.id}`} className="w-full">
+                  <Button className="w-full bg-blue-600 hover:bg-blue-700 hover:cursor-pointer">
+                    Book Appointment
+                  </Button>
+                </Link>
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
