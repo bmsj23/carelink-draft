@@ -47,6 +47,7 @@ export function AiFollowUpPanel({
 }) {
   const [consent, setConsent] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [sanitizedPreview, setSanitizedPreview] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -66,9 +67,13 @@ export function AiFollowUpPanel({
 
   function handleGenerate(intent: 'prescription' | 'previsit' | 'next_steps') {
     if (!consent) {
-      setMessage('Please confirm consent to enable AI assistance.')
+      setError('Please confirm consent to enable AI assistance.')
       return
     }
+
+    setError(null)
+    setMessage(null)
+    setSanitizedPreview(null)
 
     startTransition(async () => {
       const result = await generateGeminiSummary({
@@ -78,7 +83,7 @@ export function AiFollowUpPanel({
       })
 
       if (result.error) {
-        setMessage(result.error)
+        setError(result.error)
         return
       }
 
@@ -137,6 +142,13 @@ export function AiFollowUpPanel({
           <div className="flex items-center gap-2 text-blue-700 text-sm">
             <Loader2 className="h-4 w-4 animate-spin" />
             Drafting with Gemini...
+          </div>
+        )}
+
+        {error && (
+          <div className="flex items-start gap-2 text-sm text-red-700 bg-red-50 p-3 rounded-md">
+            <AlertTriangle className="h-4 w-4 mt-0.5" />
+            <span>{error}</span>
           </div>
         )}
 

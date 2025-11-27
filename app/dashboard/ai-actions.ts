@@ -6,6 +6,40 @@ import { revalidatePath } from 'next/cache'
 
 type QuickActionIntent = 'prescription' | 'previsit' | 'next_steps'
 
+async function callGeminiModel(prompt: string) {
+  const apiKey = process.env.GEMINI_API_KEY
+
+  if (!apiKey) return null
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [{ text: prompt }],
+          },
+        ],
+      }),
+    }
+  )
+
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || 'Gemini generation failed')
+  }
+
+  const payload = await response.json()
+  const candidate = payload?.candidates?.[0]
+  const text = candidate?.content?.parts?.map((part: { text: string }) => part.text).join('\n')
+
+  return text?.trim() || null
+}
+
 function craftSummary(intent: QuickActionIntent, sanitizedContext: string) {
   const headers: Record<QuickActionIntent, string> = {
     prescription: 'Medication questions and safety checks',
@@ -43,7 +77,14 @@ export async function generateGeminiSummary(params: {
     },
   })
 
-  const summary = craftSummary(params.intent, sanitizedContext)
+  let summary = craftSummary(params.intent, sanitizedContext)
+
+  try {
+    const aiDraft = await callGeminiModel(prompt)
+    summary = aiDraft || summary
+  } catch (error) {
+    console.error('Gemini generation failed, using fallback template', error)
+  }
 
   const documentInsert = await supabase.from('documents').insert({
     patient_id: user.id,
