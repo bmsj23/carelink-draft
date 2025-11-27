@@ -67,7 +67,9 @@ export async function createAppointment(formData: FormData) {
     return { error: 'Invalid appointment date or time.' }
   }
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user } = { user: null },
+  } = await supabase.auth.getUser()
 
   if (!user) {
     return { error: 'You must be logged in to book an appointment' }
