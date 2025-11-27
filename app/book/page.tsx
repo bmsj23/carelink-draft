@@ -2,9 +2,7 @@ import { getDoctors } from './actions'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import Image from 'next/image' // Although we use external URLs, Image component is good practice if configured.
-// For hackathon speed with external random URLs, standard img tag might be easier to avoid domain config,
-// but let's try to use a simple div with background or just an img tag for now to avoid next.config.js hassle.
+import Image from 'next/image'
 
 export default async function BookPage() {
   const doctors = await getDoctors()
@@ -17,11 +15,13 @@ export default async function BookPage() {
         {doctors.map((doctor) => (
           <Card key={doctor.id} className="overflow-hidden hover:shadow-lg transition-shadow">
             <div className="h-48 bg-gray-200 relative">
-              {/* Using standard img for external URLs to avoid config setup during hackathon */}
-              <img
+              <Image
                 src={doctor.image_url || 'https://placehold.co/600x400?text=Doctor'}
                 alt={doctor.name}
-                className="w-full h-full object-cover"
+                fill
+                sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
+                className="object-cover"
+                priority={false}
               />
             </div>
             <CardHeader>
