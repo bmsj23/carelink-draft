@@ -1,31 +1,12 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
+import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-
-const consultationSchema = z.object({
-  appointmentId: z.string().uuid({ message: 'Missing appointment for consultation.' }),
-})
-
-const messageSchema = z.object({
-  appointmentId: z.string().uuid({ message: 'Missing appointment context.' }),
-  content: z.string().min(1, 'Message cannot be empty.').max(2000, 'Message is too long.'),
-})
-
-const documentSchema = z.object({
-  title: z.string().min(1, 'Document title is required.').max(120, 'Title is too long.'),
-  fileUrl: z.string().url('Provide a valid document link.'),
-  appointmentId: z.string().uuid().optional(),
-})
 
 const refillSchema = z.object({
   prescriptionId: z.string().uuid({ message: 'Missing prescription id.' }),
   note: z.string().max(500, 'Note is too long.').optional(),
-})
-
-const reminderSchema = z.object({
-  appointmentId: z.string().uuid({ message: 'Missing appointment id.' }),
-  reminderType: z.string().min(1, 'Reminder type is required.').max(120, 'Reminder type is too long.'),
 })
 
 async function getAuthedClient() {
@@ -37,98 +18,6 @@ async function getAuthedClient() {
   }
 
   return { supabase, user }
-}
-
-export async function joinConsultation(payload: unknown) {
-  const parsed = consultationSchema.safeParse(payload)
-
-  if (!parsed.success) {
-    const message = parsed.error.issues[0]?.message ?? 'Invalid consultation request.'
-    return { error: message }
-  }
-
-  const authed = await getAuthedClient()
-  if ('error' in authed) {
-    return { error: authed.error }
-  }
-
-  const sessionUrl = `https://telemed.carelink/session/${parsed.data.appointmentId}-${crypto.randomUUID()}`
-
-  const { data, error } = await authed.supabase
-    .from('consultations')
-    .upsert({ appointment_id: parsed.data.appointmentId, session_url: sessionUrl }, { onConflict: 'appointment_id' })
-    .select()
-    .single()
-
-  if (error) {
-    console.error('Error joining consultation:', error)
-    return { error: 'Unable to create a consultation link right now. Please try again.' }
-  }
-
-  return { sessionUrl: data.session_url }
-}
-
-export async function postMessage(payload: unknown) {
-  const parsed = messageSchema.safeParse(payload)
-
-  if (!parsed.success) {
-    const message = parsed.error.issues[0]?.message ?? 'Invalid message data.'
-    return { error: message }
-  }
-
-  const authed = await getAuthedClient()
-  if ('error' in authed) {
-    return { error: authed.error }
-  }
-
-  const { data, error } = await authed.supabase
-    .from('messages')
-    .insert({
-      appointment_id: parsed.data.appointmentId,
-      sender_id: authed.user.id,
-      content: parsed.data.content,
-    })
-    .select()
-    .single()
-
-  if (error) {
-    console.error('Error posting message:', error)
-    return { error: 'We could not send your message. Please try again.' }
-  }
-
-  return { message: data }
-}
-
-export async function uploadDocument(payload: unknown) {
-  const parsed = documentSchema.safeParse(payload)
-
-  if (!parsed.success) {
-    const message = parsed.error.issues[0]?.message ?? 'Invalid document data.'
-    return { error: message }
-  }
-
-  const authed = await getAuthedClient()
-  if ('error' in authed) {
-    return { error: authed.error }
-  }
-
-  const { data, error } = await authed.supabase
-    .from('documents')
-    .insert({
-      owner_id: authed.user.id,
-      title: parsed.data.title,
-      file_url: parsed.data.fileUrl,
-      appointment_id: parsed.data.appointmentId ?? null,
-    })
-    .select()
-    .single()
-
-  if (error) {
-    console.error('Error uploading document metadata:', error)
-    return { error: 'Unable to save your document link. Please try again.' }
-  }
-
-  return { document: data }
 }
 
 export async function requestRefill(payload: unknown) {
@@ -144,55 +33,70 @@ export async function requestRefill(payload: unknown) {
     return { error: authed.error }
   }
 
-  const { data, error } = await authed.supabase
-    .from('refill_requests')
-    .insert({
-      prescription_id: parsed.data.prescriptionId,
-      patient_id: authed.user.id,
-      note: parsed.data.note ?? null,
-    })
-    .select()
-    .single()
+
+  const { error } = await authed.supabase
+    .from('prescriptions')
+    .update({ status: 'active' })
+    .eq('id', parsed.data.prescriptionId)
+    .eq('patient_id', authed.user.id)
 
   if (error) {
-    console.error('Error creating refill request:', error)
+    console.error('Error processing refill request:', error)
     return { error: 'We could not submit your refill request. Please try again.' }
   }
 
-  return { request: data }
+  revalidatePath('/dashboard')
+  return { success: true, message: 'Refill request submitted successfully!' }
 }
 
-export async function markReminderSent(payload: unknown) {
-  const parsed = reminderSchema.safeParse(payload)
-
-  if (!parsed.success) {
-    const message = parsed.error.issues[0]?.message ?? 'Invalid reminder payload.'
-    return { error: message }
-  }
-
+export async function cancelAppointment(appointmentId: string) {
   const authed = await getAuthedClient()
   if ('error' in authed) {
     return { error: authed.error }
   }
 
-  const sentAt = new Date().toISOString()
-
-  const { data, error } = await authed.supabase
-    .from('reminders')
-    .upsert({
-      appointment_id: parsed.data.appointmentId,
-      reminder_type: parsed.data.reminderType,
-      sent_at: sentAt,
-    }, {
-      onConflict: 'appointment_id,reminder_type',
-    })
-    .select()
-    .single()
+  const { error } = await authed.supabase
+    .from('appointments')
+    .update({ status: 'cancelled' })
+    .eq('id', appointmentId)
+    .eq('patient_id', authed.user.id)
 
   if (error) {
-    console.error('Error marking reminder sent:', error)
-    return { error: 'Unable to record reminder status right now.' }
+    console.error('Error cancelling appointment:', error)
+    return { error: 'Unable to cancel appointment. Please try again.' }
   }
 
-  return { reminder: data }
+  revalidatePath('/dashboard')
+  return { success: true }
+}
+
+export async function completeAppointment(appointmentId: string) {
+  const authed = await getAuthedClient()
+  if ('error' in authed) {
+    return { error: authed.error }
+  }
+
+  // check if user is a doctor
+  const { data: profile } = await authed.supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', authed.user.id)
+    .single()
+
+  if (profile?.role !== 'doctor') {
+    return { error: 'Only doctors can mark appointments as completed.' }
+  }
+
+  const { error } = await authed.supabase
+    .from('appointments')
+    .update({ status: 'completed' })
+    .eq('id', appointmentId)
+
+  if (error) {
+    console.error('Error completing appointment:', error)
+    return { error: 'Unable to complete appointment. Please try again.' }
+  }
+
+  revalidatePath('/dashboard')
+  return { success: true }
 }
