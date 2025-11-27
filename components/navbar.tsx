@@ -96,7 +96,7 @@ export default async function Navbar() {
                   <User className="h-5 w-5" />
                 </div>
                 <form action={signout}>
-                  <Button variant="ghost" size="sm" className="text-slate-500 hover:text-red-600 hover:bg-red-50">
+                  <Button variant="ghost" size="sm" className="text-slate-500 hover:text-red-600 hover:bg-red-50 hover:cursor-pointer">
                     Sign Out
                   </Button>
                 </form>
@@ -105,12 +105,12 @@ export default async function Navbar() {
           ) : (
             <div className="flex items-center gap-4">
               <Link href="/login">
-                <Button variant="ghost" className="text-slate-600 hover:text-blue-600 hover:bg-blue-50">
+                <Button variant="ghost" className="text-slate-600 hover:text-blue-600 hover:bg-blue-50 hover:cursor-pointer">
                   Sign In
                 </Button>
               </Link>
               <Link href="/signup">
-                <Button className="rounded-full bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 px-6">
+                <Button className="rounded-full bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 px-6 hover:cursor-pointer">
                   Get Started
                 </Button>
               </Link>
