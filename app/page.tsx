@@ -1,3 +1,4 @@
+// app/(public)/page.tsx  (or wherever your Home page component lives)
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,16 +13,18 @@ import {
   UserRound,
   CalendarCheck,
   Video,
-  PillBottle,
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/server";
+import { toUpperCase } from "zod";
 
 const SPECIALTIES = [
-  { name: "General Medicine", icon: PillBottle },
   { name: "Cardiologist", icon: Heart },
   { name: "Optometrist", icon: Eye },
   { name: "Pulmonologist", icon: Wind },
   { name: "Dentist", icon: SmilePlus },
+  { name: "Cardiologist", icon: Heart },
+  { name: "Optometrist", icon: Eye },
+  { name: "Pulmonologist", icon: Wind },
 ];
 
 const HOW_IT_WORKS = [
@@ -50,7 +53,7 @@ export default async function Home() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  let firstName = "Guest";
+  let firstName = "Name";
   if (user) {
     const { data: profile } = await supabase
       .from("profiles")
@@ -62,21 +65,34 @@ export default async function Home() {
     }
   }
 
-          <div className="pt-4">
-            <Link href="/login?guest=true" className="text-slate-500 hover:text-blue-600 text-sm font-medium transition-colors hover:cursor-pointer">
-              Or continue as guest to explore doctors and AI consultations
-            </Link>
-          </div>
-
-          <div className="pt-12 flex items-center justify-center gap-8 text-slate-400 grayscale opacity-70">
-             {/* Mock Logos for "Trust" */}
-             <div className="font-bold text-xl">HealthPlus</div>
-             <div className="font-bold text-xl">MediCare</div>
-             <div className="font-bold text-xl">DocConnect</div>
-             <div className="font-bold text-xl">SafeLife</div>
-          </div>
-        </div>
-      </section>
+  return (
+    <div className="flex flex-col min-h-screen bg-slate-50 font-sans">
+      {/* Main Content */}
+      <main className="flex-1">
+        <div className="mx-auto max-w-6xl px-6 py-8 space-y-10">
+          {/* Greeting + Search */}
+          <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
+                Hello,{" "}
+                {firstName
+                  ? `${firstName[0].toUpperCase()}${firstName
+                      .slice(1)
+                      .toLowerCase()}`
+                  : ""}
+                ! 👋
+              </h1>
+              <p className="text-slate-500">How are you feeling?</p>
+            </div>
+            <div className="relative w-full md:w-80">
+              <Input
+                placeholder="Search doctors, medicines..."
+                aria-label="Search"
+                className="pl-10 rounded-full border-slate-200"
+              />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            </div>
+          </section>
 
           {/* Specialties - centered */}
           <section>
@@ -112,10 +128,15 @@ export default async function Home() {
             </div>
           </section>
 
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="group p-8 rounded-4xl bg-white border border-slate-100 hover:border-blue-200 hover:shadow-2xl hover:shadow-blue-100/50 transition-all duration-300">
-              <div className="h-14 w-14 rounded-2xl bg-blue-600 flex items-center justify-center text-white mb-6 group-hover:scale-110 transition-transform">
-                <Stethoscope className="h-7 w-7" />
+          <section className="grid md:grid-cols-3 gap-6">
+            <div className="md:col-span-2 rounded-3xl bg-blue-50 p-6 flex flex-col justify-between min-h-60">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900 mb-1">
+                  Not feeling well?
+                </h3>
+                <p className="text-slate-500 text-sm">
+                  Need to talk to a doctor?
+                </p>
               </div>
               <Link href="/book">
                 <Button className="mt-6 w-full rounded-full bg-blue-600 hover:bg-blue-700">
@@ -124,14 +145,28 @@ export default async function Home() {
               </Link>
             </div>
 
-            <div className="group p-8 rounded-4xl bg-white border border-slate-100 hover:border-blue-200 hover:shadow-2xl hover:shadow-blue-100/50 transition-all duration-300">
-              <div className="h-14 w-14 rounded-2xl bg-indigo-600 flex items-center justify-center text-white mb-6 group-hover:scale-110 transition-transform">
-                <Calendar className="h-7 w-7" />
+            {/* Right: stacked cards (narrower) */}
+            <div className="flex flex-col gap-6">
+              <div className="rounded-2xl border border-slate-200 bg-white p-7 flex items-center gap-4 hover:shadow-md transition">
+                <div className="h-12 w-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600">
+                  <Pill className="h-6 w-6" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-slate-900">
+                    Order medicine
+                  </h4>
+                  <p className="text-xs text-slate-500">Pharmacy Delivery</p>
+                </div>
               </div>
 
-            <div className="group p-8 rounded-4xl bg-white border border-slate-100 hover:border-blue-200 hover:shadow-2xl hover:shadow-blue-100/50 transition-all duration-300">
-              <div className="h-14 w-14 rounded-2xl bg-teal-600 flex items-center justify-center text-white mb-6 group-hover:scale-110 transition-transform">
-                <ShieldCheck className="h-7 w-7" />
+              <div className="rounded-2xl border border-slate-200 bg-white p-7 flex items-center gap-4 hover:shadow-md transition">
+                <div className="h-12 w-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600">
+                  <ClipboardList className="h-6 w-6" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-slate-900">My History</h4>
+                  <p className="text-xs text-slate-500">Medical Records</p>
+                </div>
               </div>
             </div>
           </section>
