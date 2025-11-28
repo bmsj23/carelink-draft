@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 
 export const revalidate = 3600
-export const dynamic = 'force-static'
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   const supabase = await createClient()
