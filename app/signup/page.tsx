@@ -1,43 +1,54 @@
-'use client'
+"use client";
 
-import { signup } from '../login/actions'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import Link from 'next/link'
-import { useFormStatus } from 'react-dom'
-import { useState } from 'react'
+import { signup } from "../login/actions";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import Link from "next/link";
+import { useFormStatus } from "react-dom";
+import { useState } from "react";
 
 function SubmitButton() {
-  const { pending } = useFormStatus()
+  const { pending } = useFormStatus();
   return (
-    <Button className="w-full hover:cursor-pointer" type="submit" disabled={pending}>
-      {pending ? 'Creating account...' : 'Create Account'}
+    <Button
+      className="w-full hover:cursor-pointer"
+      type="submit"
+      disabled={pending}
+    >
+      {pending ? "Creating account..." : "Create Account"}
     </Button>
-  )
+  );
 }
 
 const specialties = [
-  'General Medicine',
-  'Cardiology',
-  'Dermatology',
-  'Pediatrics',
-  'Psychiatry',
-  'Orthopedics',
-  'Neurology',
-  'Ophthalmology',
-  'Dentistry',
-]
+  "General Medicine",
+  "Cardiology",
+  "Dermatology",
+  "Pediatrics",
+  "Psychiatry",
+  "Orthopedics",
+  "Neurology",
+  "Ophthalmology",
+  "Dentistry",
+];
 
 export default function SignupPage() {
-  const [error, setError] = useState<string | null>(null)
-  const [role, setRole] = useState<'patient' | 'doctor'>('patient')
+  const [error, setError] = useState<string | null>(null);
+  const [role, setRole] = useState<"patient" | "doctor">("patient");
 
   async function handleSubmit(formData: FormData) {
-    const res = await signup(formData)
+    const res = await signup(formData);
     if (res?.error) {
-      setError(res.error)
+      setError(res.error);
     }
   }
 
@@ -45,7 +56,9 @@ export default function SignupPage() {
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center text-blue-900">Join CareLink</CardTitle>
+          <CardTitle className="text-2xl font-bold text-center text-blue-900">
+            Join CareLink
+          </CardTitle>
           <CardDescription className="text-center">
             Create an account to manage your health
           </CardDescription>
@@ -59,26 +72,43 @@ export default function SignupPage() {
             )}
             <div className="space-y-2">
               <Label htmlFor="fullName">Full Name</Label>
-              <Input id="fullName" name="fullName" placeholder="John Doe" required />
+              <Input
+                id="fullName"
+                name="fullName"
+                placeholder="John Doe"
+                required
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" type="email" placeholder="m@example.com" required />
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                placeholder="m@example.com"
+                required
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" name="password" type="password" required minLength={6} />
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                required
+                minLength={6}
+              />
             </div>
             <div className="space-y-2">
               <Label>I am a</Label>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={() => setRole('patient')}
+                  onClick={() => setRole("patient")}
                   className={`p-3 rounded-lg border-2 text-center transition-all hover:cursor-pointer ${
-                    role === 'patient'
-                      ? 'border-blue-600 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 hover:border-gray-300'
+                    role === "patient"
+                      ? "border-blue-600 bg-blue-50 text-blue-700"
+                      : "border-gray-200 hover:border-gray-300"
                   }`}
                 >
                   <div className="font-semibold">Patient</div>
@@ -86,11 +116,11 @@ export default function SignupPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setRole('doctor')}
+                  onClick={() => setRole("doctor")}
                   className={`p-3 rounded-lg border-2 text-center transition-all hover:cursor-pointer ${
-                    role === 'doctor'
-                      ? 'border-blue-600 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 hover:border-gray-300'
+                    role === "doctor"
+                      ? "border-blue-600 bg-blue-50 text-blue-700"
+                      : "border-gray-200 hover:border-gray-300"
                   }`}
                 >
                   <div className="font-semibold">Doctor</div>
@@ -98,7 +128,7 @@ export default function SignupPage() {
                 </button>
               </div>
             </div>
-            {role === 'doctor' && (
+            {role === "doctor" && (
               <div className="space-y-2">
                 <Label htmlFor="specialty">Specialty</Label>
                 <select
@@ -108,7 +138,9 @@ export default function SignupPage() {
                   required
                 >
                   {specialties.map((spec) => (
-                    <option key={spec} value={spec}>{spec}</option>
+                    <option key={spec} value={spec}>
+                      {spec}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -118,8 +150,11 @@ export default function SignupPage() {
           <CardFooter className="flex flex-col space-y-4">
             <SubmitButton />
             <div className="text-sm text-center text-gray-500">
-              Already have an account?{' '}
-              <Link href="/login" className="text-blue-600 hover:underline hover:cursor-pointer">
+              Already have an account?{" "}
+              <Link
+                href="/login"
+                className="text-blue-600 hover:underline hover:cursor-pointer"
+              >
                 Sign in
               </Link>
             </div>
@@ -127,5 +162,5 @@ export default function SignupPage() {
         </form>
       </Card>
     </div>
-  )
+  );
 }

@@ -1,73 +1,85 @@
-import { getDoctorById } from '../actions'
-import BookingForm from './booking-form'
-import { GuestPreConsultForm } from './guest-preconsult-form'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import Image from 'next/image'
-import { redirect } from 'next/navigation'
+import { getDoctorById, getDoctors } from "../actions";
+import BookingForm from "./booking-form";
+import { createClient } from "@/utils/supabase/server";
+import { redirect } from "next/navigation";
 
-export default async function BookingPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = await params
-  const doctor = await getDoctorById(resolvedParams.id)
+function splitName(name: string | null | undefined) {
+  if (!name) return { firstName: "", lastName: "" };
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: "" };
+  }
+  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
+}
+
+export default async function BookingPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const doctor = await getDoctorById(id);
 
   if (!doctor) {
-    redirect('/book')
+    redirect("/book");
   }
 
-  const minDate = new Date()
-  minDate.setHours(0, 0, 0, 0)
-  const minDateStr = minDate.toISOString().split('T')[0]
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  const [{ data: profile }, doctors] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("full_name, phone")
+      .eq("id", user.id)
+      .maybeSingle(),
+    getDoctors(),
+  ]);
+
+  const { firstName, lastName } = splitName(
+    profile?.full_name || user.user_metadata?.full_name
+  );
+
+  const contactInfo = {
+    firstName: firstName || "Friend",
+    lastName,
+    email: user.email || "",
+    phone: profile?.phone || "",
+  };
+
+  const minDate = new Date();
+  minDate.setHours(0, 0, 0, 0);
+  const minDateStr = minDate.toISOString().split("T")[0];
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <div className="mb-4 flex items-center gap-4">
-                <Image
-                  src={doctor.image_url || 'https://placehold.co/100x100?text=Dr'}
-                  alt={doctor.name}
-                  width={64}
-                  height={64}
-                  className="rounded-full object-cover border-2 border-blue-100"
-                  priority
-                />
-                <div>
-                  <CardTitle className="text-2xl">Book with {doctor.name}</CardTitle>
-                  <CardDescription className="text-blue-600 font-medium">{doctor.specialty}</CardDescription>
-                </div>
-              </div>
-              <CardDescription>
-                Complete the form below to schedule your consultation.
-              </CardDescription>
-            </CardHeader>
-            <BookingForm doctorId={doctor.id} minDate={minDateStr} />
-          </Card>
-
-          <Card className="border-slate-200 bg-slate-50">
-            <CardHeader>
-              <CardTitle className="text-lg">Try a quick guest consult</CardTitle>
-              <CardDescription>
-                Save your symptoms securely without creating an account. You’ll be prompted to sign up to finalize booking or prescriptions.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <GuestPreConsultForm doctorId={doctor.id} />
-            </CardContent>
-          </Card>
+    <div className="min-h-screen bg-linear-to-b from-blue-50 via-white to-white py-10 px-4">
+      <div className="max-w-5xl mx-auto space-y-10">
+        <div className="text-center space-y-3">
+          <p className="text-sm tracking-[0.35em] uppercase text-blue-500 font-semibold">
+            Preferred Specialist
+          </p>
+          <h1 className="text-4xl md:text-5xl font-bold text-slate-900">
+            You&apos;re booking with {doctor.name}
+          </h1>
+          <p className="text-base text-slate-500 max-w-2xl mx-auto">
+            {doctor.specialty} &bull; You can still switch to another doctor
+            inside the form below if needed.
+          </p>
         </div>
 
-        <Card className="border-slate-200 bg-white">
-          <CardContent className="pt-6 text-sm text-slate-600">
-            <p className="font-medium text-slate-900">Privacy reminders</p>
-            <ul className="mt-2 list-disc space-y-1 pl-4">
-              <li>Guest entries avoid personal identifiers and expire after 24 hours.</li>
-              <li>Booking, prescriptions, and follow-ups require a full account to meet regulatory requirements.</li>
-              <li>Sessions are protected by Supabase Row Level Security and scoped to your browser.</li>
-            </ul>
-          </CardContent>
-        </Card>
+        <BookingForm
+          doctors={doctors}
+          minDate={minDateStr}
+          contactInfo={contactInfo}
+          initialDoctorId={doctor.id}
+        />
       </div>
     </div>
-  )
+  );
 }

@@ -125,7 +125,81 @@ alter table public.reminders enable row level security;
 create policy "Patients can manage their own reminders." on public.reminders for all using (auth.uid() = patient_id);
 
 -- ============================================
--- 7. INDEXES FOR PERFORMANCE
+-- 7. CHAT ROOMS & MESSAGING
+-- ============================================
+create table public.chat_rooms (
+  id uuid default gen_random_uuid() primary key,
+  appointment_id uuid references public.appointments(id) on delete cascade not null,
+  doctor_id uuid references public.doctors(id) on delete cascade not null,
+  patient_id uuid references public.profiles(id) on delete cascade not null,
+  status text check (status in ('pending', 'open', 'closed')) default 'pending',
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.chat_rooms enable row level security;
+
+create unique index chat_rooms_appointment_unique on public.chat_rooms(appointment_id);
+
+create policy "Participants can view chat rooms." on public.chat_rooms for select using (
+  patient_id = auth.uid() or exists (
+    select 1 from public.doctors d where d.id = chat_rooms.doctor_id and d.user_id = auth.uid()
+  )
+);
+
+create policy "Participants can insert chat rooms." on public.chat_rooms for insert with check (
+  patient_id = auth.uid() or exists (
+    select 1 from public.doctors d where d.id = chat_rooms.doctor_id and d.user_id = auth.uid()
+  )
+);
+
+create policy "Participants can update chat rooms." on public.chat_rooms for update using (
+  patient_id = auth.uid() or exists (
+    select 1 from public.doctors d where d.id = chat_rooms.doctor_id and d.user_id = auth.uid()
+  )
+) with check (
+  patient_id = auth.uid() or exists (
+    select 1 from public.doctors d where d.id = chat_rooms.doctor_id and d.user_id = auth.uid()
+  )
+);
+
+create table public.chat_messages (
+  id uuid default gen_random_uuid() primary key,
+  room_id uuid references public.chat_rooms(id) on delete cascade not null,
+  sender_id uuid references public.profiles(id) on delete cascade not null,
+  content text not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.chat_messages enable row level security;
+
+create policy "Participants can view chat messages." on public.chat_messages for select using (
+  exists (
+    select 1
+    from public.chat_rooms cr
+    left join public.doctors d on d.id = cr.doctor_id
+    where cr.id = chat_messages.room_id
+      and (
+        cr.patient_id = auth.uid()
+        or d.user_id = auth.uid()
+      )
+  )
+);
+
+create policy "Participants can insert chat messages." on public.chat_messages for insert with check (
+  auth.uid() = sender_id and exists (
+    select 1
+    from public.chat_rooms cr
+    left join public.doctors d on d.id = cr.doctor_id
+    where cr.id = chat_messages.room_id
+      and (
+        cr.patient_id = auth.uid()
+        or d.user_id = auth.uid()
+      )
+  )
+);
+
+-- ============================================
+-- 8. INDEXES FOR PERFORMANCE
 -- ============================================
 create index idx_appointments_patient on public.appointments(patient_id);
 create index idx_appointments_doctor on public.appointments(doctor_id);
@@ -133,20 +207,38 @@ create index idx_appointments_date on public.appointments(date);
 create index idx_prescriptions_patient on public.prescriptions(patient_id);
 create index idx_orders_patient on public.medication_orders(patient_id);
 create index idx_reminders_patient on public.reminders(patient_id);
+create index idx_chat_messages_room on public.chat_messages(room_id);
+create index idx_chat_messages_sender on public.chat_messages(sender_id);
 
 -- ============================================
--- 8. AUTO-CREATE PROFILE ON SIGNUP
+-- 9. AUTO-CREATE PROFILE ON SIGNUP
 -- ============================================
 create or replace function public.handle_new_user()
 returns trigger as $$
+declare
+  new_role text := coalesce(new.raw_user_meta_data->>'role', 'patient');
+  new_name text := coalesce(new.raw_user_meta_data->>'full_name', 'CareLink Doctor');
+  new_specialty text := coalesce(new.raw_user_meta_data->>'specialty', 'General Medicine');
 begin
   insert into public.profiles (id, email, full_name, role)
   values (
     new.id,
     new.email,
-    new.raw_user_meta_data->>'full_name',
-    coalesce(new.raw_user_meta_data->>'role', 'patient')
+    new_name,
+    new_role
   );
+
+  if new_role = 'doctor' then
+    insert into public.doctors (user_id, name, specialty, bio, is_available)
+    values (
+      new.id,
+      new_name,
+      new_specialty,
+      concat(new_specialty, ' specialist ready to see patients.'),
+      true
+    );
+  end if;
+
   return new;
 end;
 $$ language plpgsql security definer;

@@ -1,68 +1,73 @@
-import { getDoctors } from './actions'
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import Link from 'next/link'
-import Image from 'next/image'
-import { Search, Stethoscope } from 'lucide-react'
+import BookingForm from "./[id]/booking-form";
+import { getDoctors } from "./actions";
+import { createClient } from "@/utils/supabase/server";
+import { redirect } from "next/navigation";
+
+function splitName(name: string | null | undefined) {
+  if (!name) return { firstName: "", lastName: "" };
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: "" };
+  }
+  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
+}
 
 export default async function BookPage() {
-  const doctors = await getDoctors()
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  const [{ data: profile }, doctors] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("full_name, phone")
+      .eq("id", user.id)
+      .maybeSingle(),
+    getDoctors(),
+  ]);
+
+  const { firstName, lastName } = splitName(
+    profile?.full_name || user.user_metadata?.full_name
+  );
+
+  const contactInfo = {
+    firstName: firstName || "Friend",
+    lastName,
+    email: user.email || "",
+    phone: profile?.phone || "",
+  };
+
+  const minDate = new Date();
+  minDate.setHours(0, 0, 0, 0);
+  const minDateStr = minDate.toISOString().split("T")[0];
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-blue-900">Find a Specialist</h1>
-          <p className="text-gray-600 mt-1">Book an appointment with our trusted healthcare professionals</p>
+    <div className="min-h-screen bg-linear-to-b from-blue-50 via-white to-white py-10 px-4">
+      <div className="max-w-5xl mx-auto space-y-10">
+        <div className="text-center space-y-3">
+          <p className="text-sm tracking-[0.35em] uppercase text-blue-500 font-semibold">
+            CareLink Booking
+          </p>
+          <h1 className="text-4xl md:text-5xl font-bold text-slate-900">
+            Schedule your next consultation
+          </h1>
+          <p className="text-base text-slate-500 max-w-2xl mx-auto">
+            Start by picking a date and time, tell us why you&apos;re visiting,
+            then choose from {doctors.length} trusted specialists.
+          </p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-          <Stethoscope className="h-4 w-4" />
-          <span>{doctors.length} doctors available</span>
-        </div>
-      </div>
 
-      {doctors.length === 0 ? (
-        <Card className="bg-gray-50 border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-            <Search className="h-12 w-12 text-gray-300 mb-4" />
-            <p className="text-gray-500 mb-2">No doctors available at the moment</p>
-            <p className="text-sm text-gray-400">Please check back later</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {doctors.map((doctor) => (
-            <Card key={doctor.id} className="overflow-hidden hover:shadow-lg transition-shadow group">
-              <div className="h-48 bg-gray-200 relative overflow-hidden">
-                <Image
-                  src={doctor.image_url || 'https://placehold.co/600x400?text=Doctor'}
-                  alt={doctor.name}
-                  fill
-                  sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
-                  className="object-cover group-hover:scale-105 transition-transform duration-300"
-                  priority={false}
-                />
-              </div>
-              <CardHeader>
-                <div className="text-sm font-medium text-blue-600 mb-1">{doctor.specialty}</div>
-                <CardTitle className="text-xl">{doctor.name}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-600 line-clamp-3 text-sm">
-                  {doctor.bio || 'Experienced healthcare professional dedicated to providing excellent patient care.'}
-                </p>
-              </CardContent>
-              <CardFooter>
-                <Link href={`/book/${doctor.id}`} className="w-full">
-                  <Button className="w-full bg-blue-600 hover:bg-blue-700 hover:cursor-pointer">
-                    Book Appointment
-                  </Button>
-                </Link>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
-      )}
+        <BookingForm
+          doctors={doctors}
+          minDate={minDateStr}
+          contactInfo={contactInfo}
+        />
+      </div>
     </div>
-  )
+  );
 }
