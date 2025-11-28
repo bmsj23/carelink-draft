@@ -1,7 +1,11 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
-export async function createClient() {
+type ClientOptions = {
+  guestToken?: string
+}
+
+export async function createClient(options: ClientOptions = {}) {
   const cookieStore = await cookies()
 
   return createServerClient(
@@ -31,6 +35,13 @@ export async function createClient() {
           }
         },
       },
+      global: options.guestToken
+        ? {
+            headers: {
+              'x-guest-token': options.guestToken,
+            },
+          }
+        : undefined,
     }
   )
 }
