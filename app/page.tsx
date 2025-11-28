@@ -13,17 +13,16 @@ import {
   UserRound,
   CalendarCheck,
   Video,
+  PillBottle,
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/server";
 
 const SPECIALTIES = [
-  { name: "Cardiologist", icon: Heart },
+  { name: "General Medicine", icon: PillBottle },
   { name: "Optometrist", icon: Eye },
   { name: "Pulmonologist", icon: Wind },
   { name: "Dentist", icon: SmilePlus },
   { name: "Cardiologist", icon: Heart },
-  { name: "Optometrist", icon: Eye },
-  { name: "Pulmonologist", icon: Wind },
 ];
 
 const HOW_IT_WORKS = [
