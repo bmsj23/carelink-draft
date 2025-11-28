@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import {
   Calendar as CalendarIcon,
-  Clock,
+  ChevronLeft,
+  ChevronRight,
   Mail,
   Phone,
   Search,
@@ -20,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { createClient as createBrowserClient } from "@/utils/supabase/client";
 
 type ContactInfo = {
   firstName: string;
@@ -27,6 +29,58 @@ type ContactInfo = {
   email: string;
   phone?: string | null;
 };
+
+const TIME_SLOTS = Array.from({ length: 10 }, (_, index) => 10 + index).map(
+  (hour) => `${hour.toString().padStart(2, "0")}:00`
+);
+
+function formatSlotLabel(slot: string) {
+  const [hourStr] = slot.split(":");
+  const hour = Number(hourStr);
+  const period = hour >= 12 ? "PM" : "AM";
+  const hour12 = ((hour + 11) % 12) + 1;
+  return `${hour12}:00 ${period}`;
+}
+
+function normalizeDateInput(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getLocalTimeKey(date: Date) {
+  const hours = `${date.getHours()}`.padStart(2, "0");
+  const minutes = `${date.getMinutes()}`.padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
+function getCalendarDays(currentMonth: Date) {
+  const firstOfMonth = new Date(
+    currentMonth.getFullYear(),
+    currentMonth.getMonth(),
+    1
+  );
+  const startDate = new Date(firstOfMonth);
+  const weekday = startDate.getDay();
+  startDate.setDate(startDate.getDate() - weekday);
+
+  const days: Date[] = [];
+  for (let i = 0; i < 42; i += 1) {
+    const date = new Date(startDate);
+    date.setDate(startDate.getDate() + i);
+    days.push(date);
+  }
+  return days;
+}
+
+function isSameDay(dateA: Date, dateB: Date) {
+  return (
+    dateA.getFullYear() === dateB.getFullYear() &&
+    dateA.getMonth() === dateB.getMonth() &&
+    dateA.getDate() === dateB.getDate()
+  );
+}
 
 function SubmitButton({ canSubmit }: { canSubmit: boolean }) {
   const { pending } = useFormStatus();
@@ -57,13 +111,91 @@ export default function BookingForm({
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>(
     initialDoctorId || ""
   );
+  const minSelectableDate = useMemo(() => {
+    const date = new Date(minDate);
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }, [minDate]);
+  const [selectedDate, setSelectedDate] = useState<Date>(minSelectableDate);
+  const [currentMonth, setCurrentMonth] = useState<Date>(minSelectableDate);
+  const [selectedTime, setSelectedTime] = useState<string>("");
+  const [takenTimes, setTakenTimes] = useState<string[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
   const [doctorModalOpen, setDoctorModalOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [specialtyFilter, setSpecialtyFilter] = useState("all");
+  const supabase = useMemo(() => createBrowserClient(), []);
 
   const selectedDoctor = doctors.find(
     (doctor) => doctor.id === selectedDoctorId
   );
+
+  useEffect(() => {
+    if (!selectedDoctorId) {
+      return;
+    }
+
+    let isMounted = true;
+    async function fetchTaken() {
+      setSlotsLoading(true);
+      const dayStart = new Date(selectedDate);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(selectedDate);
+      dayEnd.setHours(23, 59, 59, 999);
+
+      const { data, error: fetchError } = await supabase
+        .from("appointments")
+        .select("date,status")
+        .eq("doctor_id", selectedDoctorId)
+        .gte("date", dayStart.toISOString())
+        .lte("date", dayEnd.toISOString());
+
+      if (!isMounted) return;
+
+      if (fetchError) {
+        console.error("Failed to load doctor availability", fetchError);
+        setTakenTimes([]);
+      } else {
+        const blocked = Array.from(
+          new Set(
+            (data || [])
+              .filter((appointment) => appointment.status !== "cancelled")
+              .map((appointment) => {
+                const bookedDate = new Date(appointment.date);
+                return getLocalTimeKey(bookedDate);
+              })
+          )
+        );
+        setTakenTimes(blocked);
+      }
+      setSlotsLoading(false);
+    }
+
+    fetchTaken();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedDate, selectedDoctorId, supabase]);
+
+  const calendarDays = useMemo(
+    () => getCalendarDays(currentMonth),
+    [currentMonth]
+  );
+
+  const canGoToPreviousMonth = useMemo(() => {
+    const currentFirst = new Date(
+      currentMonth.getFullYear(),
+      currentMonth.getMonth(),
+      1
+    );
+    const minFirst = new Date(
+      minSelectableDate.getFullYear(),
+      minSelectableDate.getMonth(),
+      1
+    );
+    return currentFirst.getTime() > minFirst.getTime();
+  }, [currentMonth, minSelectableDate]);
 
   const specialties = useMemo(() => {
     const uniq = Array.from(new Set(doctors.map((doctor) => doctor.specialty)));
@@ -85,10 +217,53 @@ export default function BookingForm({
     });
   }, [doctors, specialtyFilter, search]);
 
+  const dateFieldValue = useMemo(
+    () => normalizeDateInput(selectedDate),
+    [selectedDate]
+  );
+
+  const isSelectedTimeBlocked = Boolean(
+    selectedTime && takenTimes.includes(selectedTime)
+  );
+
+  const canSubmit = Boolean(
+    selectedDoctorId && selectedTime && !isSelectedTimeBlocked
+  );
+
+  function handleDaySelect(day: Date) {
+    if (day < minSelectableDate) return;
+    setSelectedDate(new Date(day));
+    setCurrentMonth(new Date(day.getFullYear(), day.getMonth(), 1));
+    setSelectedTime("");
+  }
+
+  function handleDoctorSelection(doctorId: string) {
+    setSelectedDoctorId(doctorId);
+    setSelectedTime("");
+    setTakenTimes([]);
+    setSlotsLoading(false);
+  }
+
   async function handleSubmit(formData: FormData) {
     if (!selectedDoctorId) {
       setError("Please choose a doctor before booking.");
       toast.error("Please choose a doctor before booking.");
+      return;
+    }
+
+    if (!selectedTime) {
+      setError("Please choose a time slot.");
+      toast.error("Please choose a time slot.");
+      return;
+    }
+
+    if (isSelectedTimeBlocked) {
+      setError(
+        "That time slot just became unavailable. Please choose another."
+      );
+      toast.error(
+        "That time slot just became unavailable. Please choose another."
+      );
       return;
     }
 
@@ -108,6 +283,8 @@ export default function BookingForm({
   return (
     <form action={handleSubmit} className="space-y-8">
       <input type="hidden" name="doctorId" value={selectedDoctorId} />
+      <input type="hidden" name="date" value={dateFieldValue} />
+      <input type="hidden" name="time" value={selectedTime} />
       {error && (
         <div className="p-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-2xl">
           {error}
@@ -134,34 +311,145 @@ export default function BookingForm({
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="date">Date</Label>
-                <div className="relative">
-                  <Input
-                    type="date"
-                    id="date"
-                    name="date"
-                    required
-                    min={minDate}
-                    className="pl-12 h-12 rounded-2xl"
-                  />
-                  <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+              <div className="space-y-3">
+                <Label>Calendar</Label>
+                <div className="rounded-2xl border border-blue-100 p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() =>
+                        setCurrentMonth(
+                          (prev) =>
+                            new Date(prev.getFullYear(), prev.getMonth() - 1, 1)
+                        )
+                      }
+                      disabled={!canGoToPreviousMonth}
+                      className="rounded-full"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <div className="text-center">
+                      <p className="text-lg font-semibold text-slate-900">
+                        {currentMonth.toLocaleDateString("en-US", {
+                          month: "long",
+                          year: "numeric",
+                        })}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() =>
+                        setCurrentMonth(
+                          (prev) =>
+                            new Date(prev.getFullYear(), prev.getMonth() + 1, 1)
+                        )
+                      }
+                      className="rounded-full"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-7 text-center text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
+                    {"SunMonTueWedThuFriSat".match(/.{1,3}/g)?.map((day) => (
+                      <div key={day}>{day}</div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-7 gap-1">
+                    {calendarDays.map((day) => {
+                      const isDisabled = day < minSelectableDate;
+                      const isSelected = isSameDay(day, selectedDate);
+                      const isOutsideMonth =
+                        day.getMonth() !== currentMonth.getMonth();
+                      return (
+                        <button
+                          key={day.toISOString()}
+                          type="button"
+                          disabled={isDisabled}
+                          onClick={() => handleDaySelect(day)}
+                          className={`h-12 rounded-xl border text-sm transition ${
+                            isSelected
+                              ? "bg-blue-600 text-white border-blue-600"
+                              : "bg-white text-slate-700 border-slate-200"
+                          } ${
+                            isDisabled
+                              ? "opacity-40 cursor-not-allowed"
+                              : "hover:border-blue-400 hover:text-blue-600"
+                          } ${
+                            isOutsideMonth && !isSelected
+                              ? "text-slate-400"
+                              : ""
+                          }`}
+                        >
+                          {day.getDate()}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="time">Time</Label>
-                <div className="relative">
-                  <Input
-                    type="time"
-                    id="time"
-                    name="time"
-                    required
-                    min="09:00"
-                    max="17:00"
-                    className="pl-12 h-12 rounded-2xl"
-                  />
-                  <Clock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <div className="space-y-3">
+                <Label>Pick a time</Label>
+                <div className="rounded-2xl border border-blue-100 p-4 space-y-4">
+                  {!selectedDoctorId && (
+                    <p className="text-sm text-slate-500">
+                      Select a doctor to see their available times.
+                    </p>
+                  )}
+                  {selectedDoctorId && (
+                    <>
+                      <p className="text-sm text-slate-500">
+                        Choose a slot between 10:00 AM and 7:00 PM.
+                      </p>
+                      <div className="flex flex-wrap gap-3">
+                        {TIME_SLOTS.map((slot) => {
+                          const isTaken = takenTimes.includes(slot);
+                          const disabled = !selectedDoctorId || isTaken;
+                          const isActive = selectedTime === slot;
+                          return (
+                            <button
+                              key={slot}
+                              type="button"
+                              disabled={disabled}
+                              onClick={() => {
+                                setSelectedTime(slot);
+                                setError(null);
+                              }}
+                              className={`px-4 py-2 rounded-full text-sm border transition ${
+                                isActive
+                                  ? "bg-blue-600 text-white border-blue-600"
+                                  : "bg-white text-slate-700 border-slate-200"
+                              } ${
+                                disabled
+                                  ? "opacity-40 cursor-not-allowed"
+                                  : "hover:border-blue-400 hover:text-blue-600"
+                              }`}
+                            >
+                              {formatSlotLabel(slot)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        {slotsLoading
+                          ? "Checking doctor availability..."
+                          : takenTimes.length > 0
+                          ? `Already booked: ${takenTimes
+                              .map((slot) => formatSlotLabel(slot))
+                              .join(", ")}`
+                          : "All slots are currently open."}
+                      </div>
+                      {isSelectedTimeBlocked && (
+                        <div className="text-sm text-red-500">
+                          That slot was just booked. Please choose another time.
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -328,7 +616,7 @@ export default function BookingForm({
       </div>
 
       <div className="rounded-3xl border border-blue-100 bg-white/80 backdrop-blur-sm p-6 shadow-sm">
-        <SubmitButton canSubmit={Boolean(selectedDoctorId)} />
+        <SubmitButton canSubmit={canSubmit} />
       </div>
 
       {doctorModalOpen && (
@@ -396,7 +684,7 @@ export default function BookingForm({
                       key={doctor.id}
                       type="button"
                       onClick={() => {
-                        setSelectedDoctorId(doctor.id);
+                        handleDoctorSelection(doctor.id);
                         setError(null);
                         closeModal();
                       }}

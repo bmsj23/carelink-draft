@@ -117,6 +117,8 @@ export function AppointmentDetails({
   const [messageInput, setMessageInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
   const router = useRouter();
   const supabase = useMemo(() => createBrowserClient(), []);
 
@@ -170,8 +172,17 @@ export function AppointmentDetails({
   }, [chatRoom?.id, supabase]);
 
   useEffect(() => {
+    if (!autoScrollEnabled) return;
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, autoScrollEnabled]);
+
+  function handleMessagesScroll() {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    setAutoScrollEnabled(distanceFromBottom < 64);
+  }
 
   async function handleSaveNotes() {
     setIsSubmitting(true);
@@ -232,6 +243,7 @@ export function AppointmentDetails({
     }
 
     setMessageInput("");
+    setAutoScrollEnabled(true);
   }
 
   return (
@@ -679,7 +691,11 @@ export function AppointmentDetails({
                 </div>
               ) : (
                 <div className="flex flex-col h-112">
-                  <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+                  <div
+                    ref={messagesContainerRef}
+                    onScroll={handleMessagesScroll}
+                    className="flex-1 overflow-y-auto space-y-4 pr-2"
+                  >
                     {messages.length === 0 ? (
                       <div className="text-center text-gray-500 mt-6">
                         No messages yet. Say hello to start the conversation.
