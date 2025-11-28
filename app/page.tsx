@@ -1,48 +1,66 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Calendar, ShieldCheck, Stethoscope, Phone, Star, Users } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  Heart,
+  Eye,
+  Wind,
+  SmilePlus,
+  Search,
+  Pill,
+  ClipboardList,
+  UserRound,
+  CalendarCheck,
+  Video,
+  PillBottle,
+} from "lucide-react";
+import { createClient } from "@/utils/supabase/server";
 
-export default function Home() {
-  return (
-    <div className="flex flex-col min-h-screen font-sans">
-      {/* Hero Section */}
-      <section className="relative flex-1 flex flex-col justify-center items-center text-center px-4 py-24 overflow-hidden">
-        {/* Abstract Background Shapes */}
-        <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10">
-          <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] rounded-full bg-blue-100/50 blur-3xl"></div>
-          <div className="absolute bottom-[-10%] left-[-5%] w-[600px] h-[600px] rounded-full bg-indigo-50/50 blur-3xl"></div>
-        </div>
+const SPECIALTIES = [
+  { name: "General Medicine", icon: PillBottle },
+  { name: "Cardiologist", icon: Heart },
+  { name: "Optometrist", icon: Eye },
+  { name: "Pulmonologist", icon: Wind },
+  { name: "Dentist", icon: SmilePlus },
+];
 
-        <div className="max-w-4xl space-y-8 z-10">
-          <div className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-medium text-blue-800 mb-4">
-            <span className="flex h-2 w-2 rounded-full bg-blue-600 mr-2"></span>
-            #1 Trusted Digital Health Platform
-          </div>
+const HOW_IT_WORKS = [
+  {
+    title: "Choose Your Doctor",
+    description:
+      "Browse the list of available doctors and select one that matches your medical needs or specialty.",
+    icon: UserRound,
+  },
+  {
+    title: "Book Your Appointment",
+    description: "Pick your preferred date, time, and consultation type.",
+    icon: CalendarCheck,
+  },
+  {
+    title: "Meet your doctor online",
+    description:
+      "Connect with your doctor and receive your medical evaluation right from your device.",
+    icon: Video,
+  },
+];
 
-          <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-slate-900 leading-tight">
-            Medical Services You <br/>
-            <span className="text-blue-600">
-              Can Rely On
-            </span>
-          </h1>
+export default async function Home() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-          <p className="text-xl md:text-2xl text-slate-600 max-w-2xl mx-auto leading-relaxed">
-            Experience healthcare reimagined. Professional consultations, prescription management, and secure records—all from the comfort of your home.
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-4 justify-center pt-8">
-            <Link href="/signup">
-              <Button size="lg" className="rounded-full bg-blue-600 hover:bg-blue-700 h-14 px-10 text-lg shadow-xl shadow-blue-200 transition-all hover:scale-105 hover:cursor-pointer">
-                Get Started Now
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
-            <Link href="/book">
-              <Button variant="outline" size="lg" className="rounded-full border-2 border-slate-200 hover:border-blue-600 hover:bg-blue-50 h-14 px-10 text-lg transition-all hover:cursor-pointer">
-                Book Appointment
-              </Button>
-            </Link>
-          </div>
+  let firstName = "Guest";
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", user.id)
+      .single();
+    if (profile?.full_name) {
+      firstName = profile.full_name.split(" ")[0];
+    }
+  }
 
           <div className="pt-4">
             <Link href="/login?guest=true" className="text-slate-500 hover:text-blue-600 text-sm font-medium transition-colors hover:cursor-pointer">
@@ -60,52 +78,49 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Stats / Trust Section */}
-      <section className="py-20 bg-white">
-        <div className="container mx-auto px-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-             <div className="flex flex-col items-center text-center p-8 rounded-3xl bg-slate-50 hover:bg-white hover:shadow-xl transition-all duration-300 border border-slate-100">
-                <div className="h-16 w-16 rounded-2xl bg-blue-100 flex items-center justify-center text-blue-600 mb-6">
-                  <Users className="h-8 w-8" />
-                </div>
-                <h3 className="text-4xl font-bold text-slate-900 mb-2">10k+</h3>
-                <p className="text-slate-600 font-medium">Happy Patients</p>
-             </div>
-             <div className="flex flex-col items-center text-center p-8 rounded-3xl bg-slate-50 hover:bg-white hover:shadow-xl transition-all duration-300 border border-slate-100">
-                <div className="h-16 w-16 rounded-2xl bg-blue-100 flex items-center justify-center text-blue-600 mb-6">
-                  <Star className="h-8 w-8" />
-                </div>
-                <h3 className="text-4xl font-bold text-slate-900 mb-2">4.9/5</h3>
-                <p className="text-slate-600 font-medium">Average Rating</p>
-             </div>
-             <div className="flex flex-col items-center text-center p-8 rounded-3xl bg-slate-50 hover:bg-white hover:shadow-xl transition-all duration-300 border border-slate-100">
-                <div className="h-16 w-16 rounded-2xl bg-blue-100 flex items-center justify-center text-blue-600 mb-6">
-                  <Stethoscope className="h-8 w-8" />
-                </div>
-                <h3 className="text-4xl font-bold text-slate-900 mb-2">150+</h3>
-                <p className="text-slate-600 font-medium">Specialist Doctors</p>
-             </div>
-          </div>
-        </div>
-      </section>
+          {/* Specialties - centered */}
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-slate-900">
+                Specialties
+              </h2>
+              <Link
+                href="/book"
+                className="text-sm text-blue-600 hover:underline"
+              >
+                See More
+              </Link>
+            </div>
 
-      {/* Features Section */}
-      <section className="py-24 px-4 bg-slate-50">
-        <div className="container mx-auto">
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="text-3xl md:text-5xl font-bold text-slate-900 mb-6">Complete Healthcare Solutions</h2>
-            <p className="text-lg text-slate-600">Designed to keep you and your family healthy at every stage of life.</p>
-          </div>
+            {/* Centered scrollable row with larger icons */}
+            <div className="flex gap-6 overflow-x-auto pb-2 justify-center">
+              {SPECIALTIES.map((specialty, idx) => (
+                <Link
+                  key={idx}
+                  href="/book"
+                  className="flex flex-col items-center gap-2 min-w-24 text-center"
+                  aria-label={`Specialty ${specialty.name}`}
+                >
+                  <div className="h-16 w-16 rounded-full border-2 border-blue-200 bg-white flex items-center justify-center text-blue-600 hover:bg-blue-50 transition">
+                    <specialty.icon className="h-7 w-7" />
+                  </div>
+                  <span className="text-xs text-slate-600">
+                    {specialty.name}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </section>
 
           <div className="grid md:grid-cols-3 gap-8">
             <div className="group p-8 rounded-4xl bg-white border border-slate-100 hover:border-blue-200 hover:shadow-2xl hover:shadow-blue-100/50 transition-all duration-300">
               <div className="h-14 w-14 rounded-2xl bg-blue-600 flex items-center justify-center text-white mb-6 group-hover:scale-110 transition-transform">
                 <Stethoscope className="h-7 w-7" />
               </div>
-              <h3 className="text-2xl font-bold text-slate-900 mb-4">Expert Doctors</h3>
-              <p className="text-slate-600 leading-relaxed mb-6">Connect with licensed professionals across various specialties. From general practice to specialized care, we have you covered.</p>
-              <Link href="/book" className="text-blue-600 font-semibold flex items-center group-hover:gap-2 transition-all">
-                Find a Specialist <ArrowRight className="ml-2 h-4 w-4" />
+              <Link href="/book">
+                <Button className="mt-6 w-full rounded-full bg-blue-600 hover:bg-blue-700">
+                  Book consultation now
+                </Button>
               </Link>
             </div>
 
@@ -113,53 +128,165 @@ export default function Home() {
               <div className="h-14 w-14 rounded-2xl bg-indigo-600 flex items-center justify-center text-white mb-6 group-hover:scale-110 transition-transform">
                 <Calendar className="h-7 w-7" />
               </div>
-              <h3 className="text-2xl font-bold text-slate-900 mb-4">Instant Booking</h3>
-              <p className="text-slate-600 leading-relaxed mb-6">Schedule appointments in seconds. No waiting rooms, no hassle. Choose a time that works for your busy lifestyle.</p>
-              <Link href="/book" className="text-indigo-600 font-semibold flex items-center group-hover:gap-2 transition-all">
-                Book Appointment <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </div>
 
             <div className="group p-8 rounded-4xl bg-white border border-slate-100 hover:border-blue-200 hover:shadow-2xl hover:shadow-blue-100/50 transition-all duration-300">
               <div className="h-14 w-14 rounded-2xl bg-teal-600 flex items-center justify-center text-white mb-6 group-hover:scale-110 transition-transform">
                 <ShieldCheck className="h-7 w-7" />
               </div>
-              <h3 className="text-2xl font-bold text-slate-900 mb-4">Secure Records</h3>
-              <p className="text-slate-600 leading-relaxed mb-6">Your medical history and prescriptions are stored safely with bank-grade encryption. Accessible only to you.</p>
-              <Link href="/dashboard" className="text-teal-600 font-semibold flex items-center group-hover:gap-2 transition-all">
-                View Records <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
             </div>
-          </div>
-        </div>
-      </section>
+          </section>
 
-      {/* CTA Section */}
-      <section className="py-24 px-4">
-        <div className="container mx-auto">
-          <div className="relative rounded-[3rem] bg-blue-600 overflow-hidden px-6 py-20 text-center">
-            <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-            <div className="absolute -top-24 -right-24 w-96 h-96 bg-blue-400 rounded-full blur-3xl opacity-50"></div>
-            <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-indigo-500 rounded-full blur-3xl opacity-50"></div>
-
-            <div className="relative z-10 max-w-2xl mx-auto space-y-8">
-              <h2 className="text-4xl md:text-5xl font-bold text-white">Ready to prioritize your health?</h2>
-              <p className="text-xl text-blue-100">Join thousands of users who trust CareLink for their medical needs.</p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link href="/signup">
-                  <Button size="lg" className="rounded-full bg-white text-blue-600 hover:bg-blue-50 h-14 px-10 text-lg font-bold shadow-lg hover:cursor-pointer">
-                    Create Free Account
-                  </Button>
-                </Link>
-                <div className="flex items-center justify-center gap-2 text-white/90 bg-white/10 rounded-full px-6 py-3 backdrop-blur-sm">
-                  <Phone className="h-5 w-5" />
-                  <span className="font-medium">24/7 Support: (555) 123-4567</span>
+          {/* How it works */}
+          <section className="py-8">
+            <h2 className="text-2xl font-bold text-slate-900 text-center mb-10">
+              How it works
+            </h2>
+            <div className="grid md:grid-cols-3 gap-8">
+              {HOW_IT_WORKS.map((step, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-2xl border border-slate-200 bg-white p-6 text-center hover:shadow-lg transition"
+                >
+                  <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                    <step.icon className="h-8 w-8" />
+                  </div>
+                  <h3 className="font-semibold text-slate-900 mb-2">
+                    {step.title}
+                  </h3>
+                  <p className="text-sm text-slate-500">{step.description}</p>
                 </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="bg-slate-800 text-slate-300 py-12">
+        <div className="mx-auto max-w-6xl px-6">
+          <div className="grid md:grid-cols-4 gap-8">
+            <div>
+              <h4 className="text-white font-semibold mb-4">For Patients</h4>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <Link href="/book" className="hover:text-white">
+                    Book Consultation
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/book" className="hover:text-white">
+                    Specialties
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    Hospitals
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    Pharmacies
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    Medical Insurance
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    HMOs
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    Services
+                  </Link>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-white font-semibold mb-4">For Doctors</h4>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <Link href="/dashboard" className="hover:text-white">
+                    Doctor Portal
+                  </Link>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-white font-semibold mb-4">
+                For Delivery Drivers
+              </h4>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <Link href="#" className="hover:text-white">
+                    Delivery Portal
+                  </Link>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-white font-semibold mb-4">Social Medias</h4>
+              <div className="flex gap-3">
+                <a
+                  href="#"
+                  className="h-8 w-8 rounded-full bg-slate-700 flex items-center justify-center hover:bg-blue-600 transition"
+                  aria-label="Facebook"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M22 12c0-5.523-4.477-10-10-10S2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12z" />
+                  </svg>
+                </a>
+                <a
+                  href="#"
+                  className="h-8 w-8 rounded-full bg-slate-700 flex items-center justify-center hover:bg-red-500 transition"
+                  aria-label="YouTube"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M19.615 3.184A2.993 2.993 0 0017.5 2H6.5a2.993 2.993 0 00-2.115.784A2.993 2.993 0 003.5 5v14c0 .828.336 1.578.885 2.116A2.993 2.993 0 006.5 22h11a2.993 2.993 0 002.115-.884A2.993 2.993 0 0020.5 19V5a2.993 2.993 0 00-.885-1.816zM10 15.5v-7l6 3.5-6 3.5z" />
+                  </svg>
+                </a>
+                <a
+                  href="#"
+                  className="h-8 w-8 rounded-full bg-slate-700 flex items-center justify-center hover:bg-sky-500 transition"
+                  aria-label="Twitter"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M8.29 20.251c7.547 0 11.675-6.253 11.675-11.675 0-.178 0-.355-.012-.53A8.348 8.348 0 0022 5.92a8.19 8.19 0 01-2.357.646 4.118 4.118 0 001.804-2.27 8.224 8.224 0 01-2.605.996 4.107 4.107 0 00-6.993 3.743 11.65 11.65 0 01-8.457-4.287 4.106 4.106 0 001.27 5.477A4.072 4.072 0 012.8 9.713v.052a4.105 4.105 0 003.292 4.022 4.095 4.095 0 01-1.853.07 4.108 4.108 0 003.834 2.85A8.233 8.233 0 012 18.407a11.616 11.616 0 006.29 1.844" />
+                  </svg>
+                </a>
+                <a
+                  href="#"
+                  className="h-8 w-8 rounded-full bg-slate-700 flex items-center justify-center hover:bg-blue-700 transition"
+                  aria-label="LinkedIn"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                  </svg>
+                </a>
               </div>
             </div>
           </div>
         </div>
-      </section>
+      </footer>
     </div>
   );
 }
