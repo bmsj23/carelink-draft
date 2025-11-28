@@ -29,33 +29,36 @@ export default async function BookingPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect("/login");
-  }
+  // allow unauthenticated users to view the booking page
+  const isGuest = !user || user.is_anonymous === true;
 
-  const [{ data: profile }, doctors] = await Promise.all([
-    supabase
+  let contactInfo = {
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+  };
+
+  if (user && !user.is_anonymous) {
+    const { data: profile } = await supabase
       .from("profiles")
       .select("full_name, phone")
       .eq("id", user.id)
-      .maybeSingle(),
-    getDoctors(),
-  ]);
+      .maybeSingle();
 
-  const { firstName, lastName } = splitName(
-    profile?.full_name || user.user_metadata?.full_name
-  );
+    const { firstName, lastName } = splitName(
+      profile?.full_name || user.user_metadata?.full_name
+    );
 
-  const contactInfo = {
-    firstName: firstName || "Friend",
-    lastName,
-    email: user.email || "",
-    phone: profile?.phone || "",
-  };
+    contactInfo = {
+      firstName: firstName || "",
+      lastName: lastName || "",
+      email: user.email || "",
+      phone: profile?.phone || "",
+    };
+  }
 
-  const minDate = new Date();
-  minDate.setHours(0, 0, 0, 0);
-  const minDateStr = minDate.toISOString().split("T")[0];
+  const doctors = await getDoctors();
 
   return (
     <div className="min-h-screen bg-linear-to-b from-blue-50 via-white to-white py-10 px-4">
@@ -75,9 +78,9 @@ export default async function BookingPage({
 
         <BookingForm
           doctors={doctors}
-          minDate={minDateStr}
           contactInfo={contactInfo}
           initialDoctorId={doctor.id}
+          isGuest={isGuest}
         />
       </div>
     </div>

@@ -31,6 +31,7 @@ export async function signup(formData: FormData) {
   const fullName = formData.get("fullName") as string;
   const role = (formData.get("role") as string) || "patient";
   const specialty = (formData.get("specialty") as string) || "General Medicine";
+  const nextUrl = (formData.get("next") as string) || null;
 
   // check if current user is anonymous (upgrading account)
   const { data: { user: currentUser } } = await supabase.auth.getUser()
@@ -86,7 +87,7 @@ export async function signup(formData: FormData) {
     }
 
     revalidatePath('/', 'layout')
-    redirect('/dashboard')
+    redirect(nextUrl || '/dashboard')
   }
 
   // regular signup for new users
@@ -107,7 +108,7 @@ export async function signup(formData: FormData) {
   }
 
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+  redirect(nextUrl || "/dashboard");
 }
 
 export async function signInAnonymously(captchaToken?: string) {

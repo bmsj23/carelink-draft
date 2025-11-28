@@ -37,12 +37,6 @@ export async function proxy(request: NextRequest) {
     request.nextUrl.pathname.startsWith(route)
   )
 
-  // routes that allow anonymous but require some auth
-  const authRequiredRoutes = ['/book']
-  const isAuthRequiredRoute = authRequiredRoutes.some(route =>
-    request.nextUrl.pathname.startsWith(route)
-  )
-
   // auth routes (login/signup) - redirect to dashboard if already logged in (and not anonymous)
   const authRoutes = ['/login', '/signup']
   const isAuthRoute = authRoutes.some(route =>
@@ -65,14 +59,6 @@ export async function proxy(request: NextRequest) {
       url.searchParams.set('message', 'Create an account to access your dashboard')
       return NextResponse.redirect(url)
     }
-  }
-
-  // book page requires auth but allows anonymous
-  if (isAuthRequiredRoute && !user) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    url.searchParams.set('next', request.nextUrl.pathname)
-    return NextResponse.redirect(url)
   }
 
   // if registered user visits login/signup, redirect to dashboard

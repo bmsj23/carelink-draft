@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/card";
 import Link from "next/link";
 import { useFormStatus } from "react-dom";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 
 function SubmitButton({ isUpgrade }: { isUpgrade: boolean }) {
@@ -27,10 +27,10 @@ function SubmitButton({ isUpgrade }: { isUpgrade: boolean }) {
     >
       {pending
         ? isUpgrade
-          ? "Upgrading account..."
+          ? "Completing account..."
           : "Creating account..."
         : isUpgrade
-          ? "Upgrade to Full Account"
+          ? "Complete Account"
           : "Create Account"}
     </Button>
   );
@@ -48,13 +48,41 @@ const specialties = [
   "Dentistry",
 ];
 
+// helper function to get prefill data from localStorage
+function getGuestPrefillData(): { fullName: string; email: string } {
+  if (typeof window === "undefined") {
+    return { fullName: "", email: "" };
+  }
+  try {
+    const storedData = localStorage.getItem("guestBookingData");
+    if (storedData) {
+      const parsed = JSON.parse(storedData);
+      if (parsed.contact) {
+        const fullName = [parsed.contact.firstName, parsed.contact.lastName]
+          .filter(Boolean)
+          .join(" ");
+        return {
+          fullName: fullName || "",
+          email: parsed.contact.email || "",
+        };
+      }
+    }
+  } catch {
+    // ignore localStorage errors
+  }
+  return { fullName: "", email: "" };
+}
+
 function SignupForm() {
   const [error, setError] = useState<string | null>(null);
   const [role, setRole] = useState<"patient" | "doctor">("patient");
   const [isAnonymous, setIsAnonymous] = useState(false);
+  const fullNameRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
   const searchParams = useSearchParams();
   const isUpgrade = searchParams.get("upgrade") === "true";
   const message = searchParams.get("message");
+  const nextUrl = searchParams.get("next");
 
   useEffect(() => {
     // check if user is currently anonymous
@@ -66,6 +94,17 @@ function SignupForm() {
       checkAuth();
     }
   }, [isUpgrade]);
+
+  // load prefill data on mount (directly set input values without triggering re-render)
+  useEffect(() => {
+    const prefill = getGuestPrefillData();
+    if (prefill.fullName && fullNameRef.current && !fullNameRef.current.value) {
+      fullNameRef.current.value = prefill.fullName;
+    }
+    if (prefill.email && emailRef.current && !emailRef.current.value) {
+      emailRef.current.value = prefill.email;
+    }
+  }, []);
 
   async function handleSubmit(formData: FormData) {
     const res = await signup(formData);
@@ -102,6 +141,7 @@ function SignupForm() {
           <div className="space-y-2">
             <Label htmlFor="fullName">Full Name</Label>
             <Input
+              ref={fullNameRef}
               id="fullName"
               name="fullName"
               placeholder="John Doe"
@@ -111,6 +151,7 @@ function SignupForm() {
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input
+              ref={emailRef}
               id="email"
               name="email"
               type="email"
@@ -175,6 +216,7 @@ function SignupForm() {
             </div>
           )}
           <input type="hidden" name="role" value={role} />
+          <input type="hidden" name="next" value={nextUrl || ""} />
         </CardContent>
         <CardFooter className="flex flex-col space-y-4">
           <SubmitButton isUpgrade={isUpgrade && isAnonymous} />

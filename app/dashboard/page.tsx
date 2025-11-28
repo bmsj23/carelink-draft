@@ -64,6 +64,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       user={{
         id: user.id,
         email: user.email,
+        is_anonymous: user.is_anonymous,
         user_metadata: user.user_metadata,
       }}
       profile={profile}

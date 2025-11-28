@@ -2,17 +2,15 @@ import React from "react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   HeartPulse,
   LayoutDashboard,
   Notebook,
   NotebookPen,
   Stethoscope,
-  User,
   Users,
 } from "lucide-react";
-import { signout } from "@/app/login/actions";
+import UserDropdown from "./user-dropdown";
 
 type NavCluster = {
   label: string;
@@ -131,29 +129,10 @@ export default async function Navbar() {
               </div>
 
               <div className="flex items-center gap-4 pl-4 border-l border-slate-200">
-                <div className="flex flex-col items-end">
-                  <span className="text-sm font-semibold text-slate-900">
-                    {profile?.full_name || "Your account"}
-                  </span>
-                  <Badge
-                    variant="outline"
-                    className="text-xs capitalize border-blue-100 bg-blue-50 text-blue-700"
-                  >
-                    {role || "guest"}
-                  </Badge>
-                </div>
-                <div className="h-9 w-9 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
-                  <User className="h-5 w-5" />
-                </div>
-                <form action={signout}>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-slate-500 hover:text-red-600 hover:bg-red-50 hover:cursor-pointer"
-                  >
-                    Sign Out
-                  </Button>
-                </form>
+                <UserDropdown
+                  userName={profile?.full_name || "Guest User"}
+                  isAnonymous={user?.is_anonymous ?? false}
+                />
               </div>
             </div>
           ) : (

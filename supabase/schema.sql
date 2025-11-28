@@ -217,7 +217,7 @@ create or replace function public.handle_new_user()
 returns trigger as $$
 declare
   new_role text := coalesce(new.raw_user_meta_data->>'role', 'patient');
-  new_name text := coalesce(new.raw_user_meta_data->>'full_name', 'CareLink Doctor');
+  new_name text := coalesce(new.raw_user_meta_data->>'full_name', 'Guest User');
   new_specialty text := coalesce(new.raw_user_meta_data->>'specialty', 'General Medicine');
 begin
   insert into public.profiles (id, email, full_name, role)
@@ -284,3 +284,208 @@ create policy "Guests can update their own pre-consults" on public.guest_pre_con
     session_token = coalesce(current_setting('request.headers', true)::json->>'x-guest-token', '')
     and session_token <> ''
   );
+
+-- ============================================
+-- PATIENT PROFILE TABLES (Progressive Profile)
+-- ============================================
+
+-- patient details: 1:1 with profiles, stores core personal/medical info
+create table public.patient_details (
+  id uuid default gen_random_uuid() primary key,
+  profile_id uuid references public.profiles(id) on delete cascade not null unique,
+  first_name text,
+  middle_name text,
+  last_name text,
+  date_of_birth date,
+  gender text check (gender in ('male', 'female', 'other', 'prefer_not_to_say')),
+  blood_type text check (blood_type in ('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'unknown')),
+  height_cm numeric(5, 2),
+  weight_kg numeric(5, 2),
+  address_line1 text,
+  address_line2 text,
+  city text,
+  state text,
+  postal_code text,
+  country text default 'Philippines',
+  emergency_contact_name text,
+  emergency_contact_phone text,
+  emergency_contact_relationship text,
+  profile_completion_percent integer default 0,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.patient_details enable row level security;
+
+create policy "Users can view their own patient details." on public.patient_details
+  for select using (auth.uid() = profile_id);
+create policy "Users can insert their own patient details." on public.patient_details
+  for insert with check (auth.uid() = profile_id);
+create policy "Users can update their own patient details." on public.patient_details
+  for update using (auth.uid() = profile_id);
+create policy "Doctors can view patient details for their appointments." on public.patient_details
+  for select using (
+    exists (
+      select 1 from public.appointments a
+      join public.doctors d on d.id = a.doctor_id
+      where a.patient_id = patient_details.profile_id
+        and d.user_id = auth.uid()
+    )
+  );
+
+-- patient allergies: 1:many with profiles
+create table public.patient_allergies (
+  id uuid default gen_random_uuid() primary key,
+  profile_id uuid references public.profiles(id) on delete cascade not null,
+  allergy_type text check (allergy_type in ('drug', 'food', 'environmental', 'other')) not null,
+  allergen text not null,
+  severity text check (severity in ('mild', 'moderate', 'severe', 'life_threatening')) default 'moderate',
+  reaction_description text,
+  diagnosed_date date,
+  notes text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.patient_allergies enable row level security;
+
+create policy "Users can view their own allergies." on public.patient_allergies
+  for select using (auth.uid() = profile_id);
+create policy "Users can insert their own allergies." on public.patient_allergies
+  for insert with check (auth.uid() = profile_id);
+create policy "Users can update their own allergies." on public.patient_allergies
+  for update using (auth.uid() = profile_id);
+create policy "Users can delete their own allergies." on public.patient_allergies
+  for delete using (auth.uid() = profile_id);
+create policy "Doctors can view patient allergies for their appointments." on public.patient_allergies
+  for select using (
+    exists (
+      select 1 from public.appointments a
+      join public.doctors d on d.id = a.doctor_id
+      where a.patient_id = patient_allergies.profile_id
+        and d.user_id = auth.uid()
+    )
+  );
+
+-- patient conditions: 1:many with profiles (chronic/ongoing conditions)
+create table public.patient_conditions (
+  id uuid default gen_random_uuid() primary key,
+  profile_id uuid references public.profiles(id) on delete cascade not null,
+  condition_name text not null,
+  condition_type text check (condition_type in ('chronic', 'acute', 'resolved', 'hereditary')) default 'chronic',
+  diagnosis_date date,
+  diagnosed_by text,
+  current_status text check (current_status in ('active', 'managed', 'resolved', 'monitoring')) default 'active',
+  treatment_notes text,
+  medications text,
+  notes text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.patient_conditions enable row level security;
+
+create policy "Users can view their own conditions." on public.patient_conditions
+  for select using (auth.uid() = profile_id);
+create policy "Users can insert their own conditions." on public.patient_conditions
+  for insert with check (auth.uid() = profile_id);
+create policy "Users can update their own conditions." on public.patient_conditions
+  for update using (auth.uid() = profile_id);
+create policy "Users can delete their own conditions." on public.patient_conditions
+  for delete using (auth.uid() = profile_id);
+create policy "Doctors can view patient conditions for their appointments." on public.patient_conditions
+  for select using (
+    exists (
+      select 1 from public.appointments a
+      join public.doctors d on d.id = a.doctor_id
+      where a.patient_id = patient_conditions.profile_id
+        and d.user_id = auth.uid()
+    )
+  );
+
+-- patient surgeries: 1:many with profiles (surgical history)
+create table public.patient_surgeries (
+  id uuid default gen_random_uuid() primary key,
+  profile_id uuid references public.profiles(id) on delete cascade not null,
+  procedure_name text not null,
+  surgery_type text check (surgery_type in ('elective', 'emergency', 'cosmetic', 'diagnostic', 'therapeutic')) default 'therapeutic',
+  surgery_date date,
+  hospital_name text,
+  surgeon_name text,
+  reason text,
+  outcome text check (outcome in ('successful', 'complications', 'ongoing_recovery', 'unknown')) default 'successful',
+  complications text,
+  follow_up_required boolean default false,
+  notes text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.patient_surgeries enable row level security;
+
+create policy "Users can view their own surgeries." on public.patient_surgeries
+  for select using (auth.uid() = profile_id);
+create policy "Users can insert their own surgeries." on public.patient_surgeries
+  for insert with check (auth.uid() = profile_id);
+create policy "Users can update their own surgeries." on public.patient_surgeries
+  for update using (auth.uid() = profile_id);
+create policy "Users can delete their own surgeries." on public.patient_surgeries
+  for delete using (auth.uid() = profile_id);
+create policy "Doctors can view patient surgeries for their appointments." on public.patient_surgeries
+  for select using (
+    exists (
+      select 1 from public.appointments a
+      join public.doctors d on d.id = a.doctor_id
+      where a.patient_id = patient_surgeries.profile_id
+        and d.user_id = auth.uid()
+    )
+  );
+
+-- indexes for patient profile tables
+create index idx_patient_details_profile on public.patient_details(profile_id);
+create index idx_patient_allergies_profile on public.patient_allergies(profile_id);
+create index idx_patient_conditions_profile on public.patient_conditions(profile_id);
+create index idx_patient_surgeries_profile on public.patient_surgeries(profile_id);
+
+-- function to calculate profile completion percentage
+create or replace function public.calculate_profile_completion(p_profile_id uuid)
+returns integer as $$
+declare
+  total_fields integer := 10;
+  filled_fields integer := 0;
+  details record;
+begin
+  select * into details from public.patient_details where profile_id = p_profile_id;
+
+  if details is null then
+    return 0;
+  end if;
+
+  if details.first_name is not null and details.first_name <> '' then filled_fields := filled_fields + 1; end if;
+  if details.last_name is not null and details.last_name <> '' then filled_fields := filled_fields + 1; end if;
+  if details.date_of_birth is not null then filled_fields := filled_fields + 1; end if;
+  if details.gender is not null then filled_fields := filled_fields + 1; end if;
+  if details.blood_type is not null and details.blood_type <> 'unknown' then filled_fields := filled_fields + 1; end if;
+  if details.height_cm is not null then filled_fields := filled_fields + 1; end if;
+  if details.weight_kg is not null then filled_fields := filled_fields + 1; end if;
+  if details.address_line1 is not null and details.address_line1 <> '' then filled_fields := filled_fields + 1; end if;
+  if details.emergency_contact_name is not null and details.emergency_contact_name <> '' then filled_fields := filled_fields + 1; end if;
+  if details.emergency_contact_phone is not null and details.emergency_contact_phone <> '' then filled_fields := filled_fields + 1; end if;
+
+  return (filled_fields * 100) / total_fields;
+end;
+$$ language plpgsql security definer;
+
+-- trigger to auto-update profile completion percentage
+create or replace function public.update_profile_completion()
+returns trigger as $$
+begin
+  new.profile_completion_percent := public.calculate_profile_completion(new.profile_id);
+  new.updated_at := timezone('utc'::text, now());
+  return new;
+end;
+$$ language plpgsql security definer;
+
+create trigger on_patient_details_change
+  before insert or update on public.patient_details
+  for each row execute procedure public.update_profile_completion();

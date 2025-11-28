@@ -24,7 +24,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { CardContent } from "@/components/ui/card";
 import { createClient as createBrowserClient } from "@/utils/supabase/client";
 
 type ContactInfo = {
@@ -34,9 +33,13 @@ type ContactInfo = {
   phone?: string | null;
 };
 
-const TIME_SLOTS = Array.from({ length: 10 }, (_, index) => 10 + index).map(
-  (hour) => `${hour.toString().padStart(2, "0")}:00`
-);
+// time slots from 10 AM to 5 PM (last slot at 5 PM)
+const FIRST_SLOT_HOUR = 10;
+const LAST_SLOT_HOUR = 17;
+const TIME_SLOTS = Array.from(
+  { length: LAST_SLOT_HOUR - FIRST_SLOT_HOUR + 1 },
+  (_, index) => FIRST_SLOT_HOUR + index
+).map((hour) => `${hour.toString().padStart(2, "0")}:00`);
 
 function formatSlotLabel(slot: string) {
   const [hourStr] = slot.split(":");
@@ -57,6 +60,46 @@ function getLocalTimeKey(date: Date) {
   const hours = `${date.getHours()}`.padStart(2, "0");
   const minutes = `${date.getMinutes()}`.padStart(2, "0");
   return `${hours}:${minutes}`;
+}
+
+// get available time slots for a given date, filtering out past times for today
+function getAvailableSlotsForDate(date: Date, now: Date): string[] {
+  const isToday =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+
+  if (!isToday) {
+    return TIME_SLOTS;
+  }
+
+  // for today, filter out slots that have already passed
+  const currentHour = now.getHours();
+  return TIME_SLOTS.filter((slot) => {
+    const slotHour = Number(slot.split(":")[0]);
+    // slot must be at least 1 hour in the future
+    return slotHour > currentHour;
+  });
+}
+
+// check if a date has any available slots
+function hasAvailableSlots(date: Date, now: Date): boolean {
+  return getAvailableSlotsForDate(date, now).length > 0;
+}
+
+// get the minimum selectable date (today if slots available, otherwise tomorrow)
+function getMinSelectableDate(now: Date): Date {
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+
+  if (hasAvailableSlots(today, now)) {
+    return today;
+  }
+
+  // no slots available today, use tomorrow
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return tomorrow;
 }
 
 function getCalendarDays(currentMonth: Date) {
@@ -86,7 +129,7 @@ function isSameDay(dateA: Date, dateB: Date) {
   );
 }
 
-function SubmitButton({ canSubmit }: { canSubmit: boolean }) {
+function SubmitButton({ canSubmit, isGuest }: { canSubmit: boolean; isGuest: boolean }) {
   const { pending } = useFormStatus();
   const disabled = pending || !canSubmit;
   return (
@@ -95,34 +138,79 @@ function SubmitButton({ canSubmit }: { canSubmit: boolean }) {
       disabled={disabled}
       className="w-full py-4 text-lg font-semibold bg-blue-600 hover:bg-blue-700 hover:cursor-pointer"
     >
-      {pending ? "Booking..." : "Confirm Appointment"}
+      {pending ? "Processing..." : isGuest ? "Continue to Book" : "Confirm Appointment"}
     </Button>
   );
 }
 
+// helper to get stored guest booking data from localStorage
+function getStoredBookingData() {
+  if (typeof window === "undefined") return null;
+  try {
+    const storedData = localStorage.getItem("guestBookingData");
+    if (!storedData) return null;
+    return JSON.parse(storedData);
+  } catch {
+    return null;
+  }
+}
+
 export default function BookingForm({
   doctors,
-  minDate,
   contactInfo,
   initialDoctorId,
+  isGuest = false,
 }: {
   doctors: Doctor[];
-  minDate: string;
   contactInfo: ContactInfo;
   initialDoctorId?: string;
+  isGuest?: boolean;
 }) {
+  // check for stored booking data (after guest signup flow)
+  const storedBooking = useMemo(() => {
+    if (isGuest) return null;
+    return getStoredBookingData();
+  }, [isGuest]);
+
+  // use current time for all time-based calculations
+  const [now, setNow] = useState(() => new Date());
   const [error, setError] = useState<string | null>(null);
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>(
-    initialDoctorId || ""
+    () => storedBooking?.booking?.doctorId || initialDoctorId || ""
   );
+
+  // editable contact info for guests
+  const [guestContact, setGuestContact] = useState({
+    firstName: contactInfo.firstName || "",
+    lastName: contactInfo.lastName || "",
+    email: contactInfo.email || "",
+    phone: contactInfo.phone || "",
+  });
+
+  // calculate minimum selectable date based on current time
   const minSelectableDate = useMemo(() => {
-    const date = new Date(minDate);
-    date.setHours(0, 0, 0, 0);
-    return date;
-  }, [minDate]);
-  const [selectedDate, setSelectedDate] = useState<Date>(minSelectableDate);
-  const [currentMonth, setCurrentMonth] = useState<Date>(minSelectableDate);
-  const [selectedTime, setSelectedTime] = useState<string>("");
+    return getMinSelectableDate(now);
+  }, [now]);
+
+  // get initial date from stored data or use minimum selectable date
+  const initialDate = useMemo(() => {
+    if (storedBooking?.booking?.date) {
+      const parsed = new Date(storedBooking.booking.date);
+      if (!isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    }
+    return minSelectableDate;
+  }, [storedBooking, minSelectableDate]);
+
+  const [selectedDate, setSelectedDate] = useState<Date>(initialDate);
+  const [currentMonth, setCurrentMonth] = useState<Date>(initialDate);
+  const [selectedTime, setSelectedTime] = useState<string>(
+    () => storedBooking?.booking?.time || ""
+  );
+  const [storedNotes] = useState<string>(
+    () => storedBooking?.booking?.notes || ""
+  );
   const [takenTimes, setTakenTimes] = useState<string[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [doctorModalOpen, setDoctorModalOpen] = useState(false);
@@ -130,8 +218,30 @@ export default function BookingForm({
   const [specialtyFilter, setSpecialtyFilter] = useState("all");
   const [requiresRegistration, setRequiresRegistration] = useState(false);
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
+  const [preConsultData, setPreConsultData] = useState<{
+    notes: string;
+    doctorId: string;
+    date: string;
+    time: string;
+  } | null>(null);
   const supabase = useMemo(() => createBrowserClient(), []);
   useRouter();
+
+  // update "now" every minute to keep time slots current
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(new Date());
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // get available slots for the selected date
+  const availableSlots = useMemo(() => {
+    return getAvailableSlotsForDate(selectedDate, now);
+  }, [selectedDate, now]);
+
+  // computed check if selected time is still valid
+  const isSelectedTimeAvailable = selectedTime ? availableSlots.includes(selectedTime) : true;
 
   const selectedDoctor = doctors.find(
     (doctor) => doctor.id === selectedDoctorId
@@ -230,15 +340,18 @@ export default function BookingForm({
   );
 
   const isSelectedTimeBlocked = Boolean(
-    selectedTime && takenTimes.includes(selectedTime)
+    selectedTime && (takenTimes.includes(selectedTime) || !isSelectedTimeAvailable)
   );
 
   const canSubmit = Boolean(
-    selectedDoctorId && selectedTime && !isSelectedTimeBlocked
+    selectedDoctorId && selectedTime && !isSelectedTimeBlocked && isSelectedTimeAvailable
   );
 
   function handleDaySelect(day: Date) {
+    // check if day is in the past
     if (day < minSelectableDate) return;
+    // check if day has available slots
+    if (!hasAvailableSlots(day, now)) return;
     setSelectedDate(new Date(day));
     setCurrentMonth(new Date(day.getFullYear(), day.getMonth(), 1));
     setSelectedTime("");
@@ -274,6 +387,34 @@ export default function BookingForm({
       return;
     }
 
+    // for guests, show registration prompt instead of trying to create appointment
+    if (isGuest) {
+      const notes = formData.get("notes") as string || "";
+      setPreConsultData({
+        notes,
+        doctorId: selectedDoctorId,
+        date: dateFieldValue,
+        time: selectedTime,
+      });
+
+      // save guest contact info and booking data to localStorage for signup form
+      const guestBookingData = {
+        contact: guestContact,
+        booking: {
+          notes,
+          doctorId: selectedDoctorId,
+          date: dateFieldValue,
+          time: selectedTime,
+        },
+      };
+      localStorage.setItem("guestBookingData", JSON.stringify(guestBookingData));
+
+      setRequiresRegistration(true);
+      setRedirectUrl(`/signup?upgrade=true&next=/book/${selectedDoctorId}`);
+      toast.success("Your consultation details have been saved!");
+      return;
+    }
+
     const res = await createAppointment(formData);
     if (res?.error) {
       setError(res.error);
@@ -295,40 +436,70 @@ export default function BookingForm({
     setSpecialtyFilter("all");
   }
 
-  // show registration prompt for anonymous users
+  // show registration prompt for guests
   if (requiresRegistration) {
+    const selectedDoctor = doctors.find((d) => d.id === preConsultData?.doctorId);
     return (
-      <CardContent className="space-y-6">
-        <div className="text-center py-6">
-          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <UserPlus className="w-8 h-8 text-blue-600" />
+      <div className="rounded-3xl border border-blue-100 bg-white/70 backdrop-blur-sm p-8 shadow-sm">
+        <div className="text-center space-y-6">
+          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+            <UserPlus className="w-10 h-10 text-green-600" />
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">
-            Create an Account to Book
-          </h3>
-          <p className="text-gray-600 mb-6">
-            Registration is required to book appointments. Your pre-consultation
-            data will be saved to your account.
-          </p>
-          <div className="space-y-3">
+          <div>
+            <h3 className="text-2xl font-bold text-slate-900 mb-2">
+              Your Pre-Consultation is Saved
+            </h3>
+            <p className="text-slate-600 max-w-md mx-auto">
+              Create an account to complete your booking and access all CareLink features.
+            </p>
+          </div>
+
+          {/* show saved consultation details */}
+          {preConsultData && (
+            <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 text-left max-w-md mx-auto">
+              <p className="text-sm font-medium text-blue-900 mb-2">Saved consultation details:</p>
+              <div className="space-y-1 text-sm text-blue-800">
+                {selectedDoctor && (
+                  <p>Doctor: <span className="font-medium">{selectedDoctor.name}</span></p>
+                )}
+                <p>Date: <span className="font-medium">{preConsultData.date}</span></p>
+                <p>Time: <span className="font-medium">{formatSlotLabel(preConsultData.time)}</span></p>
+                {preConsultData.notes && (
+                  <p className="mt-2 pt-2 border-t border-blue-200">
+                    Notes: <span className="text-blue-700">{preConsultData.notes.slice(0, 100)}{preConsultData.notes.length > 100 ? "..." : ""}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-3 max-w-sm mx-auto">
             <Link href={redirectUrl || "/signup?upgrade=true"}>
-              <Button className="w-full bg-blue-600 hover:bg-blue-700 hover:cursor-pointer">
-                Create Account
+              <Button className="w-full bg-blue-600 hover:bg-blue-700 hover:cursor-pointer py-3 text-base">
+                <UserPlus className="w-4 h-4 mr-2" />
+                Create Account to Book
               </Button>
             </Link>
+            <p className="text-xs text-slate-500">
+              Already have an account?{" "}
+              <Link href="/login" className="text-blue-600 hover:underline">
+                Sign in
+              </Link>
+            </p>
             <Button
-              variant="outline"
-              className="w-full hover:cursor-pointer"
+              variant="ghost"
+              className="w-full text-slate-500 hover:text-slate-700 hover:cursor-pointer"
               onClick={() => {
                 setRequiresRegistration(false);
+                setPreConsultData(null);
                 setError(null);
               }}
             >
-              Go Back
+              Go Back to Edit
             </Button>
           </div>
         </div>
-      </CardContent>
+      </div>
     );
   }
 
@@ -413,7 +584,9 @@ export default function BookingForm({
                   </div>
                   <div className="grid grid-cols-7 gap-1">
                     {calendarDays.map((day) => {
-                      const isDisabled = day < minSelectableDate;
+                      const isPast = day < minSelectableDate;
+                      const hasNoSlots = !hasAvailableSlots(day, now);
+                      const isDisabled = isPast || hasNoSlots;
                       const isSelected = isSameDay(day, selectedDate);
                       const isOutsideMonth =
                         day.getMonth() !== currentMonth.getMonth();
@@ -430,7 +603,7 @@ export default function BookingForm({
                           } ${
                             isDisabled
                               ? "opacity-40 cursor-not-allowed"
-                              : "hover:border-blue-400 hover:text-blue-600"
+                              : "hover:border-blue-400 hover:text-blue-600 hover:cursor-pointer"
                           } ${
                             isOutsideMonth && !isSelected
                               ? "text-slate-400"
@@ -455,36 +628,42 @@ export default function BookingForm({
                   {selectedDoctorId && (
                     <>
                       <p className="text-sm text-slate-500">
-                        Choose a slot between 10:00 AM and 7:00 PM.
+                        Choose a slot between 10:00 AM and 5:00 PM.
                       </p>
                       <div className="flex flex-wrap gap-3">
-                        {TIME_SLOTS.map((slot) => {
-                          const isTaken = takenTimes.includes(slot);
-                          const disabled = !selectedDoctorId || isTaken;
-                          const isActive = selectedTime === slot;
-                          return (
-                            <button
-                              key={slot}
-                              type="button"
-                              disabled={disabled}
-                              onClick={() => {
-                                setSelectedTime(slot);
-                                setError(null);
-                              }}
-                              className={`px-4 py-2 rounded-full text-sm border transition ${
-                                isActive
-                                  ? "bg-blue-600 text-white border-blue-600"
-                                  : "bg-white text-slate-700 border-slate-200"
-                              } ${
-                                disabled
-                                  ? "opacity-40 cursor-not-allowed"
-                                  : "hover:border-blue-400 hover:text-blue-600"
-                              }`}
-                            >
-                              {formatSlotLabel(slot)}
-                            </button>
-                          );
-                        })}
+                        {availableSlots.length === 0 ? (
+                          <p className="text-sm text-slate-500">
+                            No available time slots for this date.
+                          </p>
+                        ) : (
+                          availableSlots.map((slot) => {
+                            const isTaken = takenTimes.includes(slot);
+                            const disabled = !selectedDoctorId || isTaken;
+                            const isActive = selectedTime === slot;
+                            return (
+                              <button
+                                key={slot}
+                                type="button"
+                                disabled={disabled}
+                                onClick={() => {
+                                  setSelectedTime(slot);
+                                  setError(null);
+                                }}
+                                className={`px-4 py-2 rounded-full text-sm border transition ${
+                                  isActive
+                                    ? "bg-blue-600 text-white border-blue-600"
+                                    : "bg-white text-slate-700 border-slate-200"
+                                } ${
+                                  disabled
+                                    ? "opacity-40 cursor-not-allowed"
+                                    : "hover:border-blue-400 hover:text-blue-600 hover:cursor-pointer"
+                                }`}
+                              >
+                                {formatSlotLabel(slot)}
+                              </button>
+                            );
+                          })
+                        )}
                       </div>
                       <div className="text-xs text-slate-500">
                         {slotsLoading
@@ -534,12 +713,28 @@ export default function BookingForm({
                 rows={6}
                 required
                 className="rounded-2xl"
+                defaultValue={storedNotes}
               />
             </div>
           </section>
         </div>
 
         <div className="space-y-6">
+          {/* guest banner */}
+          {isGuest && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <div className="flex items-start gap-3">
+                <UserPlus className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium text-amber-900">Browsing as guest</p>
+                  <p className="text-sm text-amber-700">
+                    Fill out the form below. You&apos;ll create an account when you&apos;re ready to book.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <section className="rounded-3xl border border-blue-100 bg-white/80 backdrop-blur-sm p-6 shadow-sm">
             <div className="flex items-center gap-3 mb-4">
               <div className="h-10 w-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
@@ -550,48 +745,100 @@ export default function BookingForm({
                   Contact Information
                 </h3>
                 <p className="text-sm text-slate-500">
-                  We&apos;ll use this to confirm your appointment.
+                  {isGuest ? "Enter your details for the consultation." : "We'll use this to confirm your appointment."}
                 </p>
               </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>First Name</Label>
-                <Input
-                  value={contactInfo.firstName}
-                  readOnly
-                  className="rounded-2xl bg-slate-50"
-                />
+                {isGuest ? (
+                  <Input
+                    name="guestFirstName"
+                    value={guestContact.firstName}
+                    onChange={(e) => setGuestContact({ ...guestContact, firstName: e.target.value })}
+                    placeholder="Your first name"
+                    className="rounded-2xl"
+                  />
+                ) : (
+                  <Input
+                    value={contactInfo.firstName}
+                    readOnly
+                    className="rounded-2xl bg-slate-50"
+                  />
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>Last Name</Label>
-                <Input
-                  value={contactInfo.lastName}
-                  readOnly
-                  className="rounded-2xl bg-slate-50"
-                />
+                {isGuest ? (
+                  <Input
+                    name="guestLastName"
+                    value={guestContact.lastName}
+                    onChange={(e) => setGuestContact({ ...guestContact, lastName: e.target.value })}
+                    placeholder="Your last name"
+                    className="rounded-2xl"
+                  />
+                ) : (
+                  <Input
+                    value={contactInfo.lastName}
+                    readOnly
+                    className="rounded-2xl bg-slate-50"
+                  />
+                )}
               </div>
             </div>
             <div className="space-y-1.5 mt-4">
               <Label>Email Address</Label>
               <div className="relative">
-                <Input
-                  value={contactInfo.email}
-                  readOnly
-                  className="pl-12 rounded-2xl bg-slate-50"
-                />
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                {isGuest ? (
+                  <>
+                    <Input
+                      name="guestEmail"
+                      type="email"
+                      value={guestContact.email}
+                      onChange={(e) => setGuestContact({ ...guestContact, email: e.target.value })}
+                      placeholder="your.email@example.com"
+                      className="pl-12 rounded-2xl"
+                    />
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  </>
+                ) : (
+                  <>
+                    <Input
+                      value={contactInfo.email}
+                      readOnly
+                      className="pl-12 rounded-2xl bg-slate-50"
+                    />
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  </>
+                )}
               </div>
             </div>
             <div className="space-y-1.5 mt-4">
               <Label>Phone Number</Label>
               <div className="relative">
-                <Input
-                  value={contactInfo.phone || "Not provided"}
-                  readOnly
-                  className="pl-12 rounded-2xl bg-slate-50"
-                />
-                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                {isGuest ? (
+                  <>
+                    <Input
+                      name="guestPhone"
+                      type="tel"
+                      value={guestContact.phone}
+                      onChange={(e) => setGuestContact({ ...guestContact, phone: e.target.value })}
+                      placeholder="+63 917 123 4567"
+                      className="pl-12 rounded-2xl"
+                    />
+                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  </>
+                ) : (
+                  <>
+                    <Input
+                      value={contactInfo.phone || "Not provided"}
+                      readOnly
+                      className="pl-12 rounded-2xl bg-slate-50"
+                    />
+                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  </>
+                )}
               </div>
             </div>
           </section>
@@ -668,7 +915,12 @@ export default function BookingForm({
       </div>
 
       <div className="rounded-3xl border border-blue-100 bg-white/80 backdrop-blur-sm p-6 shadow-sm">
-        <SubmitButton canSubmit={canSubmit} />
+        <SubmitButton canSubmit={canSubmit} isGuest={isGuest} />
+        {isGuest && (
+          <p className="text-center text-xs text-slate-500 mt-3">
+            You&apos;ll be prompted to create an account to complete your booking.
+          </p>
+        )}
       </div>
 
       {doctorModalOpen && (

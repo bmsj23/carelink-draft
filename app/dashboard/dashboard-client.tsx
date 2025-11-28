@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -22,6 +22,7 @@ import {
   Plus,
   ShoppingCart,
   Stethoscope,
+  UserPlus,
   X,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -72,6 +73,7 @@ interface DashboardClientProps {
   user: {
     id?: string
     email?: string
+    is_anonymous?: boolean
     user_metadata?: {
       full_name?: string
     }
@@ -79,6 +81,7 @@ interface DashboardClientProps {
   profile: {
     role?: string
     id?: string
+    full_name?: string
   } | null
   patientAppointments: PatientAppointment[]
   prescriptions: Prescription[]
@@ -114,8 +117,15 @@ export function DashboardClient({
   const [prescriptionData, setPrescriptionData] = useState({ medication: '', dosage: '', instructions: '' })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // clear guest booking data from localStorage after successful booking
+  useEffect(() => {
+    if (showSuccess) {
+      localStorage.removeItem('guestBookingData')
+    }
+  }, [showSuccess])
+
   const role = profile?.role === 'doctor' ? 'doctor' : 'patient'
-  const userName = user.user_metadata?.full_name || 'User'
+  const userName = profile?.full_name || user.user_metadata?.full_name || 'User'
   const userEmail = user.email || ''
 
   const upcomingPatientAppointments = patientAppointments.filter(apt => new Date(apt.date) >= new Date()).slice(0, 4)
@@ -257,6 +267,29 @@ export function DashboardClient({
         <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-md flex items-center gap-2">
           <div className="h-2 w-2 rounded-full bg-green-500" />
           Appointment booked successfully!
+        </div>
+      )}
+
+      {/* anonymous user upgrade banner */}
+      {user.is_anonymous && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+              <UserPlus className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-medium text-blue-900">You&apos;re browsing as a guest</p>
+              <p className="text-sm text-blue-700">
+                Create an account to book appointments, save your medical history, and access all features.
+              </p>
+            </div>
+          </div>
+          <Link href="/signup">
+            <Button className="bg-blue-600 hover:bg-blue-700 hover:cursor-pointer whitespace-nowrap">
+              <UserPlus className="h-4 w-4 mr-2" />
+              Create Account
+            </Button>
+          </Link>
         </div>
       )}
 
