@@ -144,6 +144,21 @@ export async function createAppointment(formData: FormData) {
     return { error: "You must be logged in to book an appointment" };
   }
 
+  // check if user is anonymous - they need to register first
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_anonymous")
+    .eq("id", user.id)
+    .single();
+
+  if (profile?.is_anonymous) {
+    return {
+      error: "Please create an account to book appointments",
+      requiresRegistration: true,
+      redirectTo: `/signup?upgrade=true&next=/book/${parsed.data.doctorId}`,
+    };
+  }
+
   const { error } = await supabase.from("appointments").insert({
     patient_id: user.id,
     doctor_id: parsed.data.doctorId,

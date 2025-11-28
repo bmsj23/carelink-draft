@@ -9,6 +9,33 @@ export async function addAppointmentNotes(
   notes: string
 ) {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "Not authenticated" };
+  }
+
+  // security: verify the user is the doctor for this appointment
+  const { data: doctor } = await supabase
+    .from("doctors")
+    .select("id")
+    .eq("user_id", user.id)
+    .single();
+
+  if (!doctor) {
+    return { error: "Only doctors can add consultation notes" };
+  }
+
+  // verify this appointment belongs to this doctor
+  const { data: appointment } = await supabase
+    .from("appointments")
+    .select("doctor_id")
+    .eq("id", appointmentId)
+    .single();
+
+  if (!appointment || appointment.doctor_id !== doctor.id) {
+    return { error: "You do not have permission to modify this appointment" };
+  }
 
   const { error } = await supabase
     .from("appointments")
@@ -51,6 +78,18 @@ export async function createPrescription(data: {
     return { error: "Doctor profile not found" };
   }
 
+  // security: verify the doctor has an appointment with this patient
+  const { data: appointment } = await supabase
+    .from("appointments")
+    .select("id")
+    .eq("doctor_id", doctor.id)
+    .eq("patient_id", data.patientId)
+    .single();
+
+  if (!appointment) {
+    return { error: "You can only prescribe to patients you have appointments with" };
+  }
+
   const { error } = await supabase.from("prescriptions").insert({
     patient_id: data.patientId,
     doctor_id: doctor.id,
@@ -72,6 +111,26 @@ export async function createPrescription(data: {
 
 export async function cancelAppointment(appointmentId: string) {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "Not authenticated" };
+  }
+
+  // security: verify the user owns this appointment
+  const { data: appointment } = await supabase
+    .from("appointments")
+    .select("patient_id")
+    .eq("id", appointmentId)
+    .single();
+
+  if (!appointment) {
+    return { error: "Appointment not found" };
+  }
+
+  if (appointment.patient_id !== user.id) {
+    return { error: "You do not have permission to cancel this appointment" };
+  }
 
   const { error } = await supabase
     .from("appointments")

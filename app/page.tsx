@@ -43,6 +43,12 @@ export default function Home() {
               </Button>
             </Link>
           </div>
+          
+          <div className="pt-4">
+            <Link href="/login?guest=true" className="text-slate-500 hover:text-blue-600 text-sm font-medium transition-colors hover:cursor-pointer">
+              Or continue as guest to explore doctors and AI consultations
+            </Link>
+          </div>
 
           <div className="pt-12 flex items-center justify-center gap-8 text-slate-400 grayscale opacity-70">
              {/* Mock Logos for "Trust" */}
