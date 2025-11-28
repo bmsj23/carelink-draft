@@ -98,7 +98,7 @@ export default function Home() {
           </div>
 
           <div className="grid md:grid-cols-3 gap-8">
-            <div className="group p-8 rounded-[2rem] bg-white border border-slate-100 hover:border-blue-200 hover:shadow-2xl hover:shadow-blue-100/50 transition-all duration-300">
+            <div className="group p-8 rounded-4xl bg-white border border-slate-100 hover:border-blue-200 hover:shadow-2xl hover:shadow-blue-100/50 transition-all duration-300">
               <div className="h-14 w-14 rounded-2xl bg-blue-600 flex items-center justify-center text-white mb-6 group-hover:scale-110 transition-transform">
                 <Stethoscope className="h-7 w-7" />
               </div>
@@ -109,7 +109,7 @@ export default function Home() {
               </Link>
             </div>
 
-            <div className="group p-8 rounded-[2rem] bg-white border border-slate-100 hover:border-blue-200 hover:shadow-2xl hover:shadow-blue-100/50 transition-all duration-300">
+            <div className="group p-8 rounded-4xl bg-white border border-slate-100 hover:border-blue-200 hover:shadow-2xl hover:shadow-blue-100/50 transition-all duration-300">
               <div className="h-14 w-14 rounded-2xl bg-indigo-600 flex items-center justify-center text-white mb-6 group-hover:scale-110 transition-transform">
                 <Calendar className="h-7 w-7" />
               </div>
@@ -120,7 +120,7 @@ export default function Home() {
               </Link>
             </div>
 
-            <div className="group p-8 rounded-[2rem] bg-white border border-slate-100 hover:border-blue-200 hover:shadow-2xl hover:shadow-blue-100/50 transition-all duration-300">
+            <div className="group p-8 rounded-4xl bg-white border border-slate-100 hover:border-blue-200 hover:shadow-2xl hover:shadow-blue-100/50 transition-all duration-300">
               <div className="h-14 w-14 rounded-2xl bg-teal-600 flex items-center justify-center text-white mb-6 group-hover:scale-110 transition-transform">
                 <ShieldCheck className="h-7 w-7" />
               </div>

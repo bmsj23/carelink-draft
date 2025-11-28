@@ -21,14 +21,15 @@ function SubmitButton() {
 }
 
 function LoginForm() {
-  const [error, setError] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
-  const [showTurnstile, setShowTurnstile] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
   const nextUrl = searchParams.get('next') || '/book'
   const autoGuest = searchParams.get('guest') === 'true'
+
+  const [error, setError] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const [showTurnstile, setShowTurnstile] = useState(autoGuest)
 
   const handleTurnstileVerify = useCallback((token: string) => {
     setTurnstileToken(token)
@@ -43,13 +44,6 @@ function LoginForm() {
     setTurnstileToken(null)
     setError('Security verification failed. Please try again.')
   }, [])
-
-  // auto sign in as guest if ?guest=true (after turnstile verification)
-  useEffect(() => {
-    if (autoGuest) {
-      setShowTurnstile(true)
-    }
-  }, [autoGuest])
 
   // proceed with guest sign in after turnstile is verified for auto-guest
   useEffect(() => {

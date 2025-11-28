@@ -131,7 +131,7 @@ export default function BookingForm({
   const [requiresRegistration, setRequiresRegistration] = useState(false);
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
   const supabase = useMemo(() => createBrowserClient(), []);
-  const router = useRouter();
+  useRouter();
 
   const selectedDoctor = doctors.find(
     (doctor) => doctor.id === selectedDoctorId

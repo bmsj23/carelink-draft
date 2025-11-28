@@ -110,7 +110,7 @@ export function AiFollowUpPanel({
 
       <CardContent className="space-y-5 pt-5">
         <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 p-3 rounded-md border border-amber-200">
-          <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
           <span>AI outputs are informational only and not a substitute for professional medical advice.</span>
         </div>
 
@@ -131,7 +131,7 @@ export function AiFollowUpPanel({
             className="sr-only"
           />
           <div
-            className={`h-5 w-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${
+            className={`h-5 w-5 rounded border-2 flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
               consent ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
             }`}
           >
@@ -175,7 +175,7 @@ export function AiFollowUpPanel({
 
         {error && (
           <div className="flex items-start gap-2 text-sm text-red-700 bg-red-50 p-4 rounded-md border border-red-200">
-            <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
             <span>{error}</span>
           </div>
         )}

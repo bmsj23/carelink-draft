@@ -90,7 +90,7 @@ export async function signup(formData: FormData) {
   }
 
   // regular signup for new users
-  const { data: authData, error } = await supabase.auth.signUp({
+  const { error } = await supabase.auth.signUp({
     email,
     password,
     options: {
