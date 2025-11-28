@@ -1,5 +1,5 @@
-// app/(public)/page.tsx  (or wherever your Home page component lives)
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -13,18 +13,16 @@ import {
   UserRound,
   CalendarCheck,
   Video,
+  PillBottle,
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/server";
-import { toUpperCase } from "zod";
 
 const SPECIALTIES = [
-  { name: "Cardiologist", icon: Heart },
+  { name: "General Medicine", icon: PillBottle },
   { name: "Optometrist", icon: Eye },
   { name: "Pulmonologist", icon: Wind },
   { name: "Dentist", icon: SmilePlus },
   { name: "Cardiologist", icon: Heart },
-  { name: "Optometrist", icon: Eye },
-  { name: "Pulmonologist", icon: Wind },
 ];
 
 const HOW_IT_WORKS = [
@@ -53,16 +51,24 @@ export default async function Home() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  let firstName = "Name";
+  let firstName = "Guest";
+  let role: string | null = null;
+
   if (user) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("full_name")
+      .select("full_name, role")
       .eq("id", user.id)
       .single();
     if (profile?.full_name) {
       firstName = profile.full_name.split(" ")[0];
     }
+    role = profile?.role || null;
+  }
+
+  // Redirect doctors to the dashboard
+  if (role === "doctor") {
+    redirect("/dashboard");
   }
 
   return (
