@@ -110,10 +110,12 @@ export async function signup(formData: FormData) {
   redirect("/dashboard");
 }
 
-export async function signInAnonymously() {
+export async function signInAnonymously(captchaToken?: string) {
   const supabase = await createClient()
 
-  const { data, error } = await supabase.auth.signInAnonymously()
+  const { data, error } = await supabase.auth.signInAnonymously({
+    options: captchaToken ? { captchaToken } : undefined,
+  })
 
   if (error) {
     return { error: error.message }

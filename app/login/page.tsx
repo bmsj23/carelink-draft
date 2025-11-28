@@ -32,10 +32,16 @@ function LoginForm() {
 
   const handleTurnstileVerify = useCallback((token: string) => {
     setTurnstileToken(token)
+    setError(null)
   }, [])
 
   const handleTurnstileExpire = useCallback(() => {
     setTurnstileToken(null)
+  }, [])
+
+  const handleTurnstileError = useCallback(() => {
+    setTurnstileToken(null)
+    setError('Security verification failed. Please try again.')
   }, [])
 
   // auto sign in as guest if ?guest=true (after turnstile verification)
@@ -47,10 +53,17 @@ function LoginForm() {
 
   // proceed with guest sign in after turnstile is verified for auto-guest
   useEffect(() => {
-    if (autoGuest && turnstileToken) {
-      handleGuestContinue()
+    if (autoGuest && turnstileToken && !isPending) {
+      startTransition(async () => {
+        const result = await signInAnonymously(turnstileToken)
+        if (result.error) {
+          setError(result.error)
+        } else {
+          router.push(nextUrl)
+        }
+      })
     }
-  }, [autoGuest, turnstileToken])
+  }, [autoGuest, turnstileToken, router, nextUrl, isPending])
 
   async function handleSubmit(formData: FormData) {
     const res = await login(formData)
@@ -60,14 +73,17 @@ function LoginForm() {
   }
 
   function handleGuestContinue() {
-    if (!turnstileToken) {
+    if (!showTurnstile) {
       setShowTurnstile(true)
-      setError('Please complete the security verification first')
+      return
+    }
+
+    if (!turnstileToken) {
       return
     }
 
     startTransition(async () => {
-      const result = await signInAnonymously()
+      const result = await signInAnonymously(turnstileToken)
       if (result.error) {
         setError(result.error)
       } else {
@@ -99,10 +115,11 @@ function LoginForm() {
           </CardDescription>
         </CardHeader>
         <CardContent className="py-6 flex flex-col items-center space-y-4">
-          <Turnstile 
+          <Turnstile
             onVerify={handleTurnstileVerify}
             onExpire={handleTurnstileExpire}
-            onError={() => setTurnstileToken(null)}
+            onError={handleTurnstileError}
+            appearance="always"
           />
           <p className="text-xs text-gray-500 text-center">
             This helps us prevent spam and protect our services
@@ -140,7 +157,7 @@ function LoginForm() {
         </CardContent>
         <CardFooter className="flex flex-col space-y-4">
           <SubmitButton />
-          
+
           <div className="relative w-full">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t" />
@@ -150,17 +167,15 @@ function LoginForm() {
             </div>
           </div>
 
-          {showTurnstile && !turnstileToken && (
+          {showTurnstile && (
             <div className="space-y-2">
-              <Turnstile 
+              <Turnstile
                 onVerify={handleTurnstileVerify}
                 onExpire={handleTurnstileExpire}
-                onError={() => setTurnstileToken(null)}
+                onError={handleTurnstileError}
+                appearance="always"
                 className="flex justify-center"
               />
-              <p className="text-xs text-center text-amber-600">
-                Complete verification to continue as guest
-              </p>
             </div>
           )}
 
@@ -171,12 +186,12 @@ function LoginForm() {
             onClick={handleGuestContinue}
             disabled={isPending || (showTurnstile && !turnstileToken)}
           >
-            {isPending ? 'Loading...' : (showTurnstile && !turnstileToken ? 'Verify to Continue' : 'Continue as Guest')}
+            {isPending ? 'Loading...' : (showTurnstile ? (turnstileToken ? 'Continue as Guest' : 'Waiting for verification...') : 'Continue as Guest')}
           </Button>
           <p className="text-xs text-center text-gray-500">
             Browse doctors and get AI consultations without an account
           </p>
-          
+
           <div className="text-sm text-center text-gray-500">
             Don&apos;t have an account?{' '}
             <Link href="/signup" className="text-blue-600 hover:underline hover:cursor-pointer">
