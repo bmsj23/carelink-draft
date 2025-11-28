@@ -12,15 +12,19 @@ import {
   Sparkles,
   Stethoscope,
   UserRound,
+  UserPlus,
   X,
 } from "lucide-react";
 import { useFormStatus } from "react-dom";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createAppointment, type Doctor } from "../actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { CardContent } from "@/components/ui/card";
 import { createClient as createBrowserClient } from "@/utils/supabase/client";
 
 type ContactInfo = {
@@ -124,7 +128,10 @@ export default function BookingForm({
   const [doctorModalOpen, setDoctorModalOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [specialtyFilter, setSpecialtyFilter] = useState("all");
+  const [requiresRegistration, setRequiresRegistration] = useState(false);
+  const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
   const supabase = useMemo(() => createBrowserClient(), []);
+  useRouter();
 
   const selectedDoctor = doctors.find(
     (doctor) => doctor.id === selectedDoctorId
@@ -271,6 +278,14 @@ export default function BookingForm({
     if (res?.error) {
       setError(res.error);
       toast.error(res.error);
+
+      // handle anonymous user attempting to book
+      if ("requiresRegistration" in res && res.requiresRegistration) {
+        setRequiresRegistration(true);
+        setRedirectUrl(
+          ("redirectTo" in res && res.redirectTo) || `/signup?upgrade=true&next=/book/${selectedDoctorId}`
+        );
+      }
     }
   }
 
@@ -278,6 +293,43 @@ export default function BookingForm({
     setDoctorModalOpen(false);
     setSearch("");
     setSpecialtyFilter("all");
+  }
+
+  // show registration prompt for anonymous users
+  if (requiresRegistration) {
+    return (
+      <CardContent className="space-y-6">
+        <div className="text-center py-6">
+          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <UserPlus className="w-8 h-8 text-blue-600" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            Create an Account to Book
+          </h3>
+          <p className="text-gray-600 mb-6">
+            Registration is required to book appointments. Your pre-consultation
+            data will be saved to your account.
+          </p>
+          <div className="space-y-3">
+            <Link href={redirectUrl || "/signup?upgrade=true"}>
+              <Button className="w-full bg-blue-600 hover:bg-blue-700 hover:cursor-pointer">
+                Create Account
+              </Button>
+            </Link>
+            <Button
+              variant="outline"
+              className="w-full hover:cursor-pointer"
+              onClick={() => {
+                setRequiresRegistration(false);
+                setError(null);
+              }}
+            >
+              Go Back
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    );
   }
 
   return (
@@ -660,7 +712,7 @@ export default function BookingForm({
                       key={specialty}
                       type="button"
                       onClick={() => setSpecialtyFilter(specialty)}
-                      className={`px-4 py-2 rounded-full text-sm border ${
+                      className={`px-4 py-2 rounded-full text-sm border hover:cursor-pointer ${
                         specialtyFilter === specialty
                           ? "bg-blue-600 text-white border-blue-600"
                           : "bg-white text-slate-600 border-slate-200"

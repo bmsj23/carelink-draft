@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useFormStatus } from 'react-dom'
 import { createGuestPreConsult } from '../actions'
 import { Button } from '@/components/ui/button'
@@ -8,11 +8,16 @@ import { CardContent, CardFooter } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
+import { Turnstile } from '@/components/turnstile'
 
-function SubmitButton() {
+function SubmitButton({ disabled }: { disabled?: boolean }) {
   const { pending } = useFormStatus()
   return (
-    <Button type="submit" className="w-full bg-slate-900 hover:bg-slate-800" disabled={pending}>
+    <Button 
+      type="submit" 
+      className="w-full bg-slate-900 hover:bg-slate-800 hover:cursor-pointer" 
+      disabled={pending || disabled}
+    >
       {pending ? 'Saving...' : 'Save pre-consultation as guest'}
     </Button>
   )
@@ -21,8 +26,25 @@ function SubmitButton() {
 export function GuestPreConsultForm({ doctorId }: { doctorId: string }) {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+
+  const handleTurnstileVerify = useCallback((token: string) => {
+    setTurnstileToken(token)
+  }, [])
+
+  const handleTurnstileExpire = useCallback(() => {
+    setTurnstileToken(null)
+  }, [])
 
   async function handleSubmit(formData: FormData) {
+    if (!turnstileToken) {
+      setError('Please complete the security verification')
+      toast.error('Please complete the security verification')
+      return
+    }
+
+    formData.append('turnstileToken', turnstileToken)
+
     setError(null)
     setSuccess(false)
     const res = await createGuestPreConsult(formData)
@@ -48,7 +70,7 @@ export function GuestPreConsultForm({ doctorId }: { doctorId: string }) {
         )}
         {success && (
           <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
-            Saved securely for this session. Sign up when you’re ready to book.
+            Saved securely for this session. Sign up when you are ready to book.
           </div>
         )}
         <div className="space-y-2">
@@ -84,13 +106,29 @@ export function GuestPreConsultForm({ doctorId }: { doctorId: string }) {
             <option value="urgent">Urgent</option>
           </select>
         </div>
+        
+        <div className="space-y-2">
+          <Label>Security Verification</Label>
+          <Turnstile 
+            onVerify={handleTurnstileVerify}
+            onExpire={handleTurnstileExpire}
+            onError={() => setTurnstileToken(null)}
+            className="flex justify-center"
+          />
+          {!turnstileToken && (
+            <p className="text-xs text-amber-600">
+              Complete the verification above to submit
+            </p>
+          )}
+        </div>
+        
         <p className="text-xs text-slate-500">
           We avoid storing personally identifiable information until you create an account.
           Guest entries expire after 24 hours.
         </p>
       </CardContent>
       <CardFooter className="p-0">
-        <SubmitButton />
+        <SubmitButton disabled={!turnstileToken} />
       </CardFooter>
     </form>
   )

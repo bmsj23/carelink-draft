@@ -100,7 +100,7 @@ export function DashboardClient({
   medicationOrders,
   doctorAppointments,
   doctorProfile,
-  latestAppointment,
+  //latestAppointment,
   showSuccess,
 }: DashboardClientProps) {
   const [supportModalOpen, setSupportModalOpen] = useState(false)

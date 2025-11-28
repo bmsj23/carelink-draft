@@ -31,25 +31,53 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // protected routes that require authentication
-  const protectedRoutes = ['/dashboard', '/book']
-  const isProtectedRoute = protectedRoutes.some(route =>
+  // routes that require REGISTERED users (not anonymous)
+  const registeredOnlyRoutes = ['/dashboard', '/appointments']
+  const isRegisteredOnlyRoute = registeredOnlyRoutes.some(route =>
     request.nextUrl.pathname.startsWith(route)
   )
 
-  // auth routes (login/signup) - redirect to dashboard if already logged in
+  // routes that allow anonymous but require some auth
+  const authRequiredRoutes = ['/book']
+  const isAuthRequiredRoute = authRequiredRoutes.some(route =>
+    request.nextUrl.pathname.startsWith(route)
+  )
+
+  // auth routes (login/signup) - redirect to dashboard if already logged in (and not anonymous)
   const authRoutes = ['/login', '/signup']
   const isAuthRoute = authRoutes.some(route =>
     request.nextUrl.pathname === route
   )
 
-  if (isProtectedRoute && !user) {
+  // dashboard and appointments require registered user
+  if (isRegisteredOnlyRoute) {
+    if (!user) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      return NextResponse.redirect(url)
+    }
+
+    // if anonymous user tries to access dashboard, redirect to signup with upgrade flag
+    if (user.is_anonymous) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/signup'
+      url.searchParams.set('upgrade', 'true')
+      url.searchParams.set('message', 'Create an account to access your dashboard')
+      return NextResponse.redirect(url)
+    }
+  }
+
+  // book page requires auth but allows anonymous
+  if (isAuthRequiredRoute && !user) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
+    url.searchParams.set('next', request.nextUrl.pathname)
     return NextResponse.redirect(url)
   }
 
-  if (isAuthRoute && user) {
+  // if registered user visits login/signup, redirect to dashboard
+  // but allow anonymous users to visit signup (to upgrade their account)
+  if (isAuthRoute && user && !user.is_anonymous) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
     return NextResponse.redirect(url)
