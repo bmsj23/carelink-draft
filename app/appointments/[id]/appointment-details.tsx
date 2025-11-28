@@ -1,12 +1,18 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowLeft,
   Calendar,
@@ -16,52 +22,76 @@ import {
   Loader2,
   Mail,
   MapPin,
+  MessageCircle,
   Pill,
+  Send,
   Stethoscope,
   User,
   X,
   AlertCircle,
   FilePlus2,
-} from 'lucide-react'
-import Link from 'next/link'
-import { addAppointmentNotes, createPrescription, cancelAppointment } from './actions'
+} from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import {
+  addAppointmentNotes,
+  createPrescription,
+  cancelAppointment,
+  confirmAppointment,
+} from "./actions";
+import { createClient as createBrowserClient } from "@/utils/supabase/client";
 
 type Appointment = {
-  id: string
-  date: string
-  status: string
-  notes?: string | null
-  reason?: string | null
+  id: string;
+  date: string;
+  status: string;
+  notes?: string | null;
+  reason?: string | null;
   doctors: {
-    id: string
-    name: string
-    specialty: string
-    image_url?: string | null
-  }
+    id: string;
+    name: string;
+    specialty: string;
+    image_url?: string | null;
+  };
   patient: {
-    id: string
-    full_name: string
-    email: string
-  }
-}
+    id: string;
+    full_name: string;
+    email: string;
+  };
+};
 
 type Prescription = {
-  id: string
-  medication_name: string
-  dosage: string
-  instructions?: string | null
-  status: string
-  created_at: string
+  id: string;
+  medication_name: string;
+  dosage: string;
+  instructions?: string | null;
+  status: string;
+  created_at: string;
   doctors?: {
-    name: string
-  }
-}
+    name: string;
+  };
+};
+
+type ChatRoom = {
+  id: string;
+  status: string;
+};
+
+type ChatMessage = {
+  id: string;
+  sender_id: string;
+  content: string;
+  created_at: string;
+};
 
 interface AppointmentDetailsProps {
-  appointment: Appointment
-  prescriptions: Prescription[]
-  isDoctor: boolean
-  currentUserId: string
+  appointment: Appointment;
+  prescriptions: Prescription[];
+  isDoctor: boolean;
+  currentUserId: string;
+  chatRoom: ChatRoom | null;
+  chatMessages: ChatMessage[];
 }
 
 export function AppointmentDetails({
@@ -69,56 +99,139 @@ export function AppointmentDetails({
   prescriptions,
   isDoctor,
   currentUserId,
+  chatRoom,
+  chatMessages,
 }: AppointmentDetailsProps) {
-  const [showNotesModal, setShowNotesModal] = useState(false)
-  const [showPrescriptionModal, setShowPrescriptionModal] = useState(false)
-  const [showCancelModal, setShowCancelModal] = useState(false)
-  const [notes, setNotes] = useState(appointment.notes || '')
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [notes, setNotes] = useState(appointment.notes || "");
   const [prescriptionData, setPrescriptionData] = useState({
-    medication: '',
-    dosage: '',
-    instructions: '',
-  })
-  const [isSubmitting, setIsSubmitting] = useState(false)
+    medication: "",
+    dosage: "",
+    instructions: "",
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>(chatMessages);
+  const [messageInput, setMessageInput] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const router = useRouter();
+  const supabase = useMemo(() => createBrowserClient(), []);
 
-  const appointmentDate = new Date(appointment.date)
-  const isPast = appointmentDate < new Date()
-  const isUpcoming = !isPast && appointment.status !== 'cancelled'
+  const appointmentDate = new Date(appointment.date);
+  const isPast = appointmentDate < new Date();
+  const isUpcoming = !isPast && appointment.status !== "cancelled";
+  const chatPartnerName = isDoctor
+    ? appointment.patient.full_name
+    : `Dr. ${appointment.doctors.name}`;
 
   const statusColors: Record<string, string> = {
-    scheduled: 'bg-yellow-100 text-yellow-800',
-    confirmed: 'bg-blue-100 text-blue-800',
-    completed: 'bg-green-100 text-green-800',
-    cancelled: 'bg-red-100 text-red-800',
-  }
+    scheduled: "bg-yellow-100 text-yellow-800",
+    pending: "bg-yellow-100 text-yellow-800",
+    confirmed: "bg-blue-100 text-blue-800",
+    completed: "bg-green-100 text-green-800",
+    cancelled: "bg-red-100 text-red-800",
+  };
+
+  useEffect(() => {
+    setMessages(chatMessages);
+  }, [chatMessages]);
+
+  useEffect(() => {
+    if (!chatRoom?.id) return;
+
+    const channel = supabase
+      .channel(`chat-room-${chatRoom.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "chat_messages",
+          filter: `room_id=eq.${chatRoom.id}`,
+        },
+        (payload) => {
+          const newMessage = payload.new as ChatMessage;
+          setMessages((prev) => {
+            if (prev.some((message) => message.id === newMessage.id)) {
+              return prev;
+            }
+            return [...prev, newMessage];
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [chatRoom?.id, supabase]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   async function handleSaveNotes() {
-    setIsSubmitting(true)
-    await addAppointmentNotes(appointment.id, notes)
-    setIsSubmitting(false)
-    setShowNotesModal(false)
+    setIsSubmitting(true);
+    await addAppointmentNotes(appointment.id, notes);
+    setIsSubmitting(false);
+    setShowNotesModal(false);
   }
 
   async function handleCreatePrescription() {
-    if (!prescriptionData.medication.trim()) return
-    setIsSubmitting(true)
+    if (!prescriptionData.medication.trim()) return;
+    setIsSubmitting(true);
     await createPrescription({
       appointmentId: appointment.id,
       patientId: appointment.patient.id,
       medicationName: prescriptionData.medication,
       dosage: prescriptionData.dosage,
       instructions: prescriptionData.instructions,
-    })
-    setIsSubmitting(false)
-    setShowPrescriptionModal(false)
-    setPrescriptionData({ medication: '', dosage: '', instructions: '' })
+    });
+    setIsSubmitting(false);
+    setShowPrescriptionModal(false);
+    setPrescriptionData({ medication: "", dosage: "", instructions: "" });
   }
 
   async function handleCancelAppointment() {
-    setIsSubmitting(true)
-    await cancelAppointment(appointment.id)
-    setIsSubmitting(false)
-    setShowCancelModal(false)
+    setIsSubmitting(true);
+    await cancelAppointment(appointment.id);
+    setIsSubmitting(false);
+    setShowCancelModal(false);
+  }
+
+  async function handleConfirmAppointment() {
+    setIsConfirming(true);
+    const result = await confirmAppointment(appointment.id);
+    setIsConfirming(false);
+
+    if (result?.error) {
+      toast.error(result.error);
+      return;
+    }
+
+    toast.success("Appointment confirmed. Chat is now open.");
+    router.refresh();
+  }
+
+  async function handleSendMessage() {
+    if (!chatRoom?.id || !messageInput.trim()) return;
+    setIsSending(true);
+    const { error } = await supabase.from("chat_messages").insert({
+      room_id: chatRoom.id,
+      sender_id: currentUserId,
+      content: messageInput.trim(),
+    });
+    setIsSending(false);
+
+    if (error) {
+      toast.error("Unable to send message. Please try again.");
+      return;
+    }
+
+    setMessageInput("");
   }
 
   return (
@@ -126,16 +239,24 @@ export function AppointmentDetails({
       {/* notes modal */}
       {showNotesModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowNotesModal(false)} />
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowNotesModal(false)}
+          />
           <Card className="relative z-10 w-full max-w-lg mx-4">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Consultation Notes</CardTitle>
-                <button onClick={() => setShowNotesModal(false)} className="text-gray-400 hover:text-gray-600 hover:cursor-pointer">
+                <button
+                  onClick={() => setShowNotesModal(false)}
+                  className="text-gray-400 hover:text-gray-600 hover:cursor-pointer"
+                >
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <CardDescription>Add notes for {appointment.patient.full_name}</CardDescription>
+              <CardDescription>
+                Add notes for {appointment.patient.full_name}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <Textarea
@@ -144,8 +265,16 @@ export function AppointmentDetails({
                 placeholder="Enter diagnosis, recommendations, follow-up instructions..."
                 rows={6}
               />
-              <Button onClick={handleSaveNotes} disabled={isSubmitting} className="w-full hover:cursor-pointer">
-                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
+              <Button
+                onClick={handleSaveNotes}
+                disabled={isSubmitting}
+                className="w-full hover:cursor-pointer"
+              >
+                {isSubmitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Check className="h-4 w-4 mr-2" />
+                )}
                 Save Notes & Mark Complete
               </Button>
             </CardContent>
@@ -156,23 +285,36 @@ export function AppointmentDetails({
       {/* prescription modal */}
       {showPrescriptionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowPrescriptionModal(false)} />
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowPrescriptionModal(false)}
+          />
           <Card className="relative z-10 w-full max-w-lg mx-4">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>New Prescription</CardTitle>
-                <button onClick={() => setShowPrescriptionModal(false)} className="text-gray-400 hover:text-gray-600 hover:cursor-pointer">
+                <button
+                  onClick={() => setShowPrescriptionModal(false)}
+                  className="text-gray-400 hover:text-gray-600 hover:cursor-pointer"
+                >
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <CardDescription>For {appointment.patient.full_name}</CardDescription>
+              <CardDescription>
+                For {appointment.patient.full_name}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label>Medication Name</Label>
                 <Input
                   value={prescriptionData.medication}
-                  onChange={(e) => setPrescriptionData(p => ({ ...p, medication: e.target.value }))}
+                  onChange={(e) =>
+                    setPrescriptionData((p) => ({
+                      ...p,
+                      medication: e.target.value,
+                    }))
+                  }
                   placeholder="e.g., Amoxicillin 500mg"
                 />
               </div>
@@ -180,7 +322,12 @@ export function AppointmentDetails({
                 <Label>Dosage</Label>
                 <Input
                   value={prescriptionData.dosage}
-                  onChange={(e) => setPrescriptionData(p => ({ ...p, dosage: e.target.value }))}
+                  onChange={(e) =>
+                    setPrescriptionData((p) => ({
+                      ...p,
+                      dosage: e.target.value,
+                    }))
+                  }
                   placeholder="e.g., 1 tablet 3x daily for 7 days"
                 />
               </div>
@@ -188,13 +335,26 @@ export function AppointmentDetails({
                 <Label>Instructions</Label>
                 <Textarea
                   value={prescriptionData.instructions}
-                  onChange={(e) => setPrescriptionData(p => ({ ...p, instructions: e.target.value }))}
+                  onChange={(e) =>
+                    setPrescriptionData((p) => ({
+                      ...p,
+                      instructions: e.target.value,
+                    }))
+                  }
                   placeholder="Take with food. Complete full course..."
                   rows={3}
                 />
               </div>
-              <Button onClick={handleCreatePrescription} disabled={isSubmitting || !prescriptionData.medication} className="w-full bg-blue-600 hover:bg-blue-700 hover:cursor-pointer">
-                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <FilePlus2 className="h-4 w-4 mr-2" />}
+              <Button
+                onClick={handleCreatePrescription}
+                disabled={isSubmitting || !prescriptionData.medication}
+                className="w-full bg-blue-600 hover:bg-blue-700 hover:cursor-pointer"
+              >
+                {isSubmitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <FilePlus2 className="h-4 w-4 mr-2" />
+                )}
                 Create Prescription
               </Button>
             </CardContent>
@@ -205,7 +365,10 @@ export function AppointmentDetails({
       {/* cancel modal */}
       {showCancelModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowCancelModal(false)} />
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowCancelModal(false)}
+          />
           <Card className="relative z-10 w-full max-w-md mx-4">
             <CardHeader>
               <div className="flex items-center gap-3">
@@ -214,21 +377,42 @@ export function AppointmentDetails({
                 </div>
                 <div>
                   <CardTitle>Cancel Appointment</CardTitle>
-                  <CardDescription>This action cannot be undone</CardDescription>
+                  <CardDescription>
+                    This action cannot be undone
+                  </CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-gray-600">
-                Are you sure you want to cancel your appointment with {isDoctor ? appointment.patient.full_name : `Dr. ${appointment.doctors.name}`} on{' '}
-                {appointmentDate.toLocaleDateString()} at {appointmentDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}?
+                Are you sure you want to cancel your appointment with{" "}
+                {isDoctor
+                  ? appointment.patient.full_name
+                  : `Dr. ${appointment.doctors.name}`}{" "}
+                on {appointmentDate.toLocaleDateString()} at{" "}
+                {appointmentDate.toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+                ?
               </p>
               <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setShowCancelModal(false)} className="flex-1 hover:cursor-pointer">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowCancelModal(false)}
+                  className="flex-1 hover:cursor-pointer"
+                >
                   Keep Appointment
                 </Button>
-                <Button variant="destructive" onClick={handleCancelAppointment} disabled={isSubmitting} className="flex-1 hover:cursor-pointer">
-                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                <Button
+                  variant="destructive"
+                  onClick={handleCancelAppointment}
+                  disabled={isSubmitting}
+                  className="flex-1 hover:cursor-pointer"
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : null}
                   Cancel Appointment
                 </Button>
               </div>
@@ -239,18 +423,29 @@ export function AppointmentDetails({
 
       {/* header */}
       <div className="mb-6">
-        <Link href="/dashboard" className="inline-flex items-center text-blue-600 hover:text-blue-700 mb-4 hover:cursor-pointer">
+        <Link
+          href="/dashboard"
+          className="inline-flex items-center text-blue-600 hover:text-blue-700 mb-4 hover:cursor-pointer"
+        >
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back to Dashboard
         </Link>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Appointment Details</h1>
+            <h1 className="text-2xl font-bold text-gray-900">
+              Appointment Details
+            </h1>
             <p className="text-gray-600">
-              {isDoctor ? `Patient: ${appointment.patient.full_name}` : `With Dr. ${appointment.doctors.name}`}
+              {isDoctor
+                ? `Patient: ${appointment.patient.full_name}`
+                : `With Dr. ${appointment.doctors.name}`}
             </p>
           </div>
-          <Badge className={`${statusColors[appointment.status] || 'bg-gray-100 text-gray-800'} px-4 py-2 text-sm capitalize`}>
+          <Badge
+            className={`${
+              statusColors[appointment.status] || "bg-gray-100 text-gray-800"
+            } px-4 py-2 text-sm capitalize`}
+          >
             {appointment.status}
           </Badge>
         </div>
@@ -275,7 +470,14 @@ export function AppointmentDetails({
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Date</p>
-                    <p className="font-semibold">{appointmentDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                    <p className="font-semibold">
+                      {appointmentDate.toLocaleDateString("en-US", {
+                        weekday: "long",
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -284,7 +486,12 @@ export function AppointmentDetails({
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Time</p>
-                    <p className="font-semibold">{appointmentDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                    <p className="font-semibold">
+                      {appointmentDate.toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -307,12 +514,18 @@ export function AppointmentDetails({
                     )}
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">{isDoctor ? 'Patient' : 'Doctor'}</p>
+                    <p className="text-sm text-gray-500">
+                      {isDoctor ? "Patient" : "Doctor"}
+                    </p>
                     <p className="font-bold text-lg">
-                      {isDoctor ? appointment.patient.full_name : `Dr. ${appointment.doctors.name}`}
+                      {isDoctor
+                        ? appointment.patient.full_name
+                        : `Dr. ${appointment.doctors.name}`}
                     </p>
                     {!isDoctor && (
-                      <p className="text-blue-600 font-medium">{appointment.doctors.specialty}</p>
+                      <p className="text-blue-600 font-medium">
+                        {appointment.doctors.specialty}
+                      </p>
                     )}
                     {isDoctor && (
                       <p className="text-gray-600 flex items-center gap-1 mt-1">
@@ -329,17 +542,42 @@ export function AppointmentDetails({
                 <div className="pt-4 border-t flex flex-wrap gap-3">
                   {isDoctor ? (
                     <>
-                      <Button onClick={() => setShowNotesModal(true)} className="hover:cursor-pointer">
+                      {appointment.status === "pending" && (
+                        <Button
+                          onClick={handleConfirmAppointment}
+                          disabled={isConfirming}
+                          className="bg-green-600 hover:bg-green-700 hover:cursor-pointer"
+                        >
+                          {isConfirming ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <Check className="h-4 w-4 mr-2" />
+                          )}
+                          Confirm & Open Chat
+                        </Button>
+                      )}
+                      <Button
+                        onClick={() => setShowNotesModal(true)}
+                        className="hover:cursor-pointer"
+                      >
                         <FileText className="h-4 w-4 mr-2" />
                         Add Notes & Complete
                       </Button>
-                      <Button variant="outline" onClick={() => setShowPrescriptionModal(true)} className="hover:cursor-pointer">
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowPrescriptionModal(true)}
+                        className="hover:cursor-pointer"
+                      >
                         <FilePlus2 className="h-4 w-4 mr-2" />
                         Write Prescription
                       </Button>
                     </>
                   ) : (
-                    <Button variant="destructive" onClick={() => setShowCancelModal(true)} className="hover:cursor-pointer">
+                    <Button
+                      variant="destructive"
+                      onClick={() => setShowCancelModal(true)}
+                      className="hover:cursor-pointer"
+                    >
                       <X className="h-4 w-4 mr-2" />
                       Cancel Appointment
                     </Button>
@@ -360,7 +598,9 @@ export function AppointmentDetails({
               </CardHeader>
               <CardContent>
                 <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-gray-700 whitespace-pre-wrap">{appointment.notes}</p>
+                  <p className="text-gray-700 whitespace-pre-wrap">
+                    {appointment.notes}
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -377,23 +617,37 @@ export function AppointmentDetails({
               </CardHeader>
               <CardContent className="space-y-3">
                 {prescriptions.map((rx) => (
-                  <div key={rx.id} className="flex items-start justify-between p-4 bg-gray-50 rounded-lg">
+                  <div
+                    key={rx.id}
+                    className="flex items-start justify-between p-4 bg-gray-50 rounded-lg"
+                  >
                     <div className="flex items-start gap-3">
                       <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
                         <Pill className="h-5 w-5 text-blue-600" />
                       </div>
                       <div>
-                        <p className="font-semibold text-gray-900">{rx.medication_name}</p>
+                        <p className="font-semibold text-gray-900">
+                          {rx.medication_name}
+                        </p>
                         <p className="text-sm text-gray-600">{rx.dosage}</p>
                         {rx.instructions && (
-                          <p className="text-sm text-gray-500 mt-1">{rx.instructions}</p>
+                          <p className="text-sm text-gray-500 mt-1">
+                            {rx.instructions}
+                          </p>
                         )}
                         <p className="text-xs text-gray-400 mt-2">
-                          Prescribed {new Date(rx.created_at).toLocaleDateString()}
+                          Prescribed{" "}
+                          {new Date(rx.created_at).toLocaleDateString()}
                         </p>
                       </div>
                     </div>
-                    <Badge className={rx.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}>
+                    <Badge
+                      className={
+                        rx.status === "active"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-gray-100 text-gray-700"
+                      }
+                    >
                       {rx.status}
                     </Badge>
                   </div>
@@ -401,6 +655,106 @@ export function AppointmentDetails({
               </CardContent>
             </Card>
           )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageCircle className="h-5 w-5 text-blue-600" />
+                Care Chat
+              </CardTitle>
+              <CardDescription>
+                Real-time messaging with {chatPartnerName} is available once
+                this visit is confirmed.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {appointment.status !== "confirmed" ? (
+                <div className="border border-dashed border-yellow-200 bg-yellow-50 rounded-2xl p-4 text-sm text-yellow-800">
+                  Chat opens after the doctor confirms this appointment. You
+                  will receive an instant chat window here.
+                </div>
+              ) : !chatRoom ? (
+                <div className="border border-dashed border-blue-200 bg-blue-50 rounded-2xl p-4 text-sm text-blue-800">
+                  Setting up your chat room. Please refresh in a moment.
+                </div>
+              ) : (
+                <div className="flex flex-col h-112">
+                  <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+                    {messages.length === 0 ? (
+                      <div className="text-center text-gray-500 mt-6">
+                        No messages yet. Say hello to start the conversation.
+                      </div>
+                    ) : (
+                      messages.map((message) => {
+                        const isOwnMessage =
+                          message.sender_id === currentUserId;
+                        return (
+                          <div
+                            key={message.id}
+                            className={`flex ${
+                              isOwnMessage ? "justify-end" : "justify-start"
+                            }`}
+                          >
+                            <div
+                              className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm whitespace-pre-line ${
+                                isOwnMessage
+                                  ? "bg-blue-600 text-white"
+                                  : "bg-gray-100 text-gray-900"
+                              }`}
+                            >
+                              <p>{message.content}</p>
+                              <div
+                                className={`mt-1 text-[11px] ${
+                                  isOwnMessage
+                                    ? "text-white/70"
+                                    : "text-gray-500"
+                                }`}
+                              >
+                                {isOwnMessage ? "You" : chatPartnerName} •{" "}
+                                {new Date(
+                                  message.created_at
+                                ).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                    <div ref={messagesEndRef} />
+                  </div>
+                  <form
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      handleSendMessage();
+                    }}
+                    className="mt-4 flex gap-3"
+                  >
+                    <Input
+                      value={messageInput}
+                      onChange={(event) => setMessageInput(event.target.value)}
+                      placeholder={`Message ${chatPartnerName}`}
+                      disabled={isSending}
+                      className="rounded-2xl"
+                    />
+                    <Button
+                      type="submit"
+                      disabled={!messageInput.trim() || isSending}
+                      className="shrink-0 bg-blue-600 hover:bg-blue-700 hover:cursor-pointer"
+                    >
+                      {isSending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </form>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* sidebar */}
@@ -429,10 +783,14 @@ export function AppointmentDetails({
             </CardHeader>
             <CardContent>
               <p className="text-sm text-gray-600 mb-4">
-                For any questions about your appointment, contact our support team.
+                For any questions about your appointment, contact our support
+                team.
               </p>
               <Link href="/dashboard">
-                <Button variant="outline" className="w-full hover:cursor-pointer">
+                <Button
+                  variant="outline"
+                  className="w-full hover:cursor-pointer"
+                >
                   Contact Support
                 </Button>
               </Link>
@@ -441,5 +799,5 @@ export function AppointmentDetails({
         </div>
       </div>
     </div>
-  )
+  );
 }
