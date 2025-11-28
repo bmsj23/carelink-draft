@@ -154,3 +154,41 @@ $$ language plpgsql security definer;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- ============================================
+-- 9. GUEST PRE-CONSULTATION CAPTURE
+-- ============================================
+create table public.guest_pre_consults (
+  id uuid default gen_random_uuid() primary key,
+  session_token text not null,
+  doctor_id uuid references public.doctors(id) on delete set null,
+  symptoms text not null,
+  goal text,
+  urgency text check (urgency in ('low', 'normal', 'urgent')) default 'normal',
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  expires_at timestamp with time zone default (timezone('utc'::text, now()) + interval '1 day') not null,
+  is_migrated boolean default false
+);
+
+alter table public.guest_pre_consults enable row level security;
+
+create policy "Guests can insert their own pre-consults" on public.guest_pre_consults
+  for insert
+  with check (
+    session_token = coalesce(current_setting('request.headers', true)::json->>'x-guest-token', '')
+    and session_token <> ''
+  );
+
+create policy "Guests can view their own pre-consults" on public.guest_pre_consults
+  for select
+  using (
+    session_token = coalesce(current_setting('request.headers', true)::json->>'x-guest-token', '')
+    and session_token <> ''
+  );
+
+create policy "Guests can update their own pre-consults" on public.guest_pre_consults
+  for update
+  using (
+    session_token = coalesce(current_setting('request.headers', true)::json->>'x-guest-token', '')
+    and session_token <> ''
+  );
