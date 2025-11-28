@@ -14,10 +14,6 @@ export type Doctor = {
   created_at: string
 }
 
-const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
-  ? new URL(process.env.NEXT_PUBLIC_SITE_URL).toString().replace(/\/$/, '')
-  : 'http://localhost:3000'
-
 const createAppointmentSchema = z.object({
   doctorId: z.string().uuid({ message: 'Choose a valid doctor.' }),
   date: z.string().min(1, 'Date is required.'),
@@ -26,17 +22,19 @@ const createAppointmentSchema = z.object({
 })
 
 export async function getDoctors(): Promise<Doctor[]> {
-  const response = await fetch(`${baseUrl}/api/doctors`, {
-    next: { revalidate: 3600, tags: ['doctors'] },
-  })
+  const supabase = await createClient()
+  
+  const { data: doctors, error } = await supabase
+    .from('doctors')
+    .select('*')
+    .order('name')
 
-  if (!response.ok) {
-    console.error('Error fetching doctors:', response.statusText)
+  if (error) {
+    console.error('Error fetching doctors:', error)
     return []
   }
 
-  const doctors = await response.json()
-  return doctors
+  return doctors ?? []
 }
 
 export async function getDoctorById(id: string) {
