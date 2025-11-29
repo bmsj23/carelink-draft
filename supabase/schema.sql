@@ -30,6 +30,7 @@ create table public.doctors (
   bio text,
   image_url text,
   is_available boolean default true,
+  verification_status text check (verification_status in ('unverified', 'pending', 'verified', 'rejected')) default 'unverified',
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -38,6 +39,61 @@ alter table public.doctors enable row level security;
 create policy "Doctors are viewable by everyone." on public.doctors for select using (true);
 create policy "Users can create their own doctor profile." on public.doctors for insert with check (auth.uid() = user_id);
 create policy "Doctors can update their own profile." on public.doctors for update using (auth.uid() = user_id);
+
+-- ============================================
+-- 2.1 DOCTOR CREDENTIALS TABLE (for verification)
+-- ============================================
+create table public.doctor_credentials (
+  id uuid default gen_random_uuid() primary key,
+  doctor_id uuid references public.doctors(id) on delete cascade not null,
+  license_number text not null,
+  document_type text not null, -- e.g., 'PRC License', 'Diploma', 'TIN ID'
+  document_url text not null, -- link to the stored document in Supabase Storage
+  issued_date date,
+  expiry_date date,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.doctor_credentials enable row level security;
+
+-- Policy: Doctors can manage their own credentials.
+create policy "Doctors can manage their own credentials." on public.doctor_credentials
+  for all using (
+    exists (select 1 from public.doctors where doctors.id = doctor_credentials.doctor_id and doctors.user_id = auth.uid())
+  );
+
+-- Policy: Admin role (to be defined) can view all credentials for verification.
+-- This requires a custom 'admin' role in your database. For now, we'll create a placeholder.
+-- create policy "Admins can view all credentials." on public.doctor_credentials
+--   for select using (get_my_claim('user_role') = '"admin"');
+
+
+-- ============================================
+-- 2.2 AUDIT TRAIL TABLE
+-- ============================================
+create table public.audit_trail (
+  id uuid default gen_random_uuid() primary key,
+  actor_id uuid references public.profiles(id) on delete set null,
+  action text not null, -- e.g., 'view_patient_record', 'update_prescription', 'delete_appointment'
+  target_id text, -- e.g., patient_id, prescription_id, appointment_id
+  target_table text, -- e.g., 'patient_details', 'prescriptions', 'appointments'
+  old_value jsonb,
+  new_value jsonb,
+  ip_address text,
+  user_agent text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.audit_trail enable row level security;
+
+-- Policy: Only admins can view the audit trail.
+-- create policy "Admins can view the audit trail." on public.audit_trail
+--   for select using (get_my_claim('user_role') = '"admin"');
+
+-- Policy: Authenticated users can insert into the audit trail (typically done via triggers or server-side logic).
+create policy "Authenticated users can insert their own audit events." on public.audit_trail
+  for insert with check (auth.uid() = actor_id);
+
 
 -- ============================================
 -- 3. APPOINTMENTS TABLE
@@ -199,7 +255,124 @@ create policy "Participants can insert chat messages." on public.chat_messages f
 );
 
 -- ============================================
--- 8. INDEXES FOR PERFORMANCE
+-- 8. ENCRYPTION SETUP (Application-Level Encryption)
+-- ============================================
+
+-- Enable pgsodium extension if not already enabled
+create extension if not exists pgsodium with schema pgsodium;
+
+-- Table to store encryption keys, associated with a user
+create table if not exists private.encryption_keys (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid not null unique,
+  key bytea not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+-- Ensure this table is in a private schema that Supabase's auto-generated API cannot access.
+-- Supabase automatically creates a 'private' schema, but if not, create it:
+-- create schema if not exists private;
+
+-- Row Level Security for the keys table
+alter table private.encryption_keys enable row level security;
+create policy "Users can only access their own key" on private.encryption_keys
+  for select using (auth.uid() = user_id);
+-- No insert/update/delete policies from the client-side for maximum security. Key generation should be handled server-side.
+
+-- Function to create an encryption key for the current user.
+-- This should be called by the application backend after a user is created.
+create or replace function public.create_user_key()
+returns uuid as $$
+declare
+  new_key_id uuid;
+begin
+  if not exists (select 1 from private.encryption_keys where user_id = auth.uid()) then
+    insert into private.encryption_keys (user_id, key)
+    values (auth.uid(), pgsodium.crypto_aead_det_keygen())
+    returning id into new_key_id;
+    return new_key_id;
+  end if;
+  return null;
+end;
+$$ language plpgsql volatile security definer;
+
+-- Function to encrypt data
+create or replace function public.encrypt_data(data_to_encrypt text, user_id_for_key uuid)
+returns bytea as $$
+declare
+  key bytea;
+begin
+  select ek.key into key from private.encryption_keys ek where ek.user_id = user_id_for_key;
+  if not found then
+    raise exception 'No encryption key found for user %', user_id_for_key;
+  end if;
+  -- Using pgsodium's authenticated encryption with additional authenticated data (AAD)
+  -- Here, we'll use the user_id as AAD to ensure the data is tied to the user.
+  return pgsodium.crypto_aead_det_encrypt(data_to_encrypt::bytea, user_id_for_key::text::bytea, key);
+end;
+$$ language plpgsql volatile security definer;
+
+-- Function to decrypt data
+create or replace function public.decrypt_data(encrypted_data bytea, user_id_for_key uuid)
+returns text as $$
+declare
+  key bytea;
+begin
+  select ek.key into key from private.encryption_keys ek where ek.user_id = user_id_for_key;
+  if not found then
+    raise exception 'No encryption key found for user %', user_id_for_key;
+  end if;
+  return convert_from(pgsodium.crypto_aead_det_decrypt(encrypted_data, user_id_for_key::text::bytea, key), 'utf8');
+end;
+$$ language plpgsql stable security definer;
+
+-- Add encrypted column to chat_messages
+alter table public.chat_messages add column content_encrypted bytea;
+
+-- Modify RLS policy for chat_messages to use the encrypted column
+drop policy if exists "Participants can insert chat messages." on public.chat_messages;
+create policy "Participants can insert chat messages." on public.chat_messages for insert with check (
+  auth.uid() = sender_id and exists (
+    select 1
+    from public.chat_rooms cr
+    left join public.doctors d on d.id = cr.doctor_id
+    where cr.id = chat_messages.room_id
+      and (
+        cr.patient_id = auth.uid()
+        or d.user_id = auth.uid()
+      )
+  )
+);
+
+-- Trigger to automatically encrypt the content of a new message
+create or replace function public.encrypt_chat_message()
+returns trigger as $$
+begin
+  if new.content is not null then
+    new.content_encrypted := public.encrypt_data(new.content, new.sender_id);
+    new.content := null; -- Clear the plaintext content
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger on_chat_message_insert
+  before insert on public.chat_messages
+  for each row execute procedure public.encrypt_chat_message();
+
+-- View to decrypt chat messages
+create or replace view public.decrypted_chat_messages as
+select
+  id,
+  room_id,
+  sender_id,
+  public.decrypt_data(content_encrypted, sender_id) as content,
+  created_at
+from
+  public.chat_messages;
+
+
+-- ============================================
+-- 9. INDEXES FOR PERFORMANCE
 -- ============================================
 create index idx_appointments_patient on public.appointments(patient_id);
 create index idx_appointments_doctor on public.appointments(doctor_id);
