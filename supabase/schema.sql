@@ -30,6 +30,7 @@ create table public.doctors (
   bio text,
   image_url text,
   is_available boolean default true,
+  verification_status text check (verification_status in ('unverified', 'pending', 'verified', 'rejected')) default 'unverified',
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -38,6 +39,61 @@ alter table public.doctors enable row level security;
 create policy "Doctors are viewable by everyone." on public.doctors for select using (true);
 create policy "Users can create their own doctor profile." on public.doctors for insert with check (auth.uid() = user_id);
 create policy "Doctors can update their own profile." on public.doctors for update using (auth.uid() = user_id);
+
+-- ============================================
+-- 2.1 DOCTOR CREDENTIALS TABLE (for verification)
+-- ============================================
+create table public.doctor_credentials (
+  id uuid default gen_random_uuid() primary key,
+  doctor_id uuid references public.doctors(id) on delete cascade not null,
+  license_number text not null,
+  document_type text not null, -- e.g., 'PRC License', 'Diploma', 'TIN ID'
+  document_url text not null, -- link to the stored document in Supabase Storage
+  issued_date date,
+  expiry_date date,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.doctor_credentials enable row level security;
+
+-- Policy: Doctors can manage their own credentials.
+create policy "Doctors can manage their own credentials." on public.doctor_credentials
+  for all using (
+    exists (select 1 from public.doctors where doctors.id = doctor_credentials.doctor_id and doctors.user_id = auth.uid())
+  );
+
+-- Policy: Admin role (to be defined) can view all credentials for verification.
+-- This requires a custom 'admin' role in your database. For now, we'll create a placeholder.
+-- create policy "Admins can view all credentials." on public.doctor_credentials
+--   for select using (get_my_claim('user_role') = '"admin"');
+
+
+-- ============================================
+-- 2.2 AUDIT TRAIL TABLE
+-- ============================================
+create table public.audit_trail (
+  id uuid default gen_random_uuid() primary key,
+  actor_id uuid references public.profiles(id) on delete set null,
+  action text not null, -- e.g., 'view_patient_record', 'update_prescription', 'delete_appointment'
+  target_id text, -- e.g., patient_id, prescription_id, appointment_id
+  target_table text, -- e.g., 'patient_details', 'prescriptions', 'appointments'
+  old_value jsonb,
+  new_value jsonb,
+  ip_address text,
+  user_agent text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.audit_trail enable row level security;
+
+-- Policy: Only admins can view the audit trail.
+-- create policy "Admins can view the audit trail." on public.audit_trail
+--   for select using (get_my_claim('user_role') = '"admin"');
+
+-- Policy: Authenticated users can insert into the audit trail (typically done via triggers or server-side logic).
+create policy "Authenticated users can insert their own audit events." on public.audit_trail
+  for insert with check (auth.uid() = actor_id);
+
 
 -- ============================================
 -- 3. APPOINTMENTS TABLE
@@ -166,7 +222,7 @@ create table public.chat_messages (
   id uuid default gen_random_uuid() primary key,
   room_id uuid references public.chat_rooms(id) on delete cascade not null,
   sender_id uuid references public.profiles(id) on delete cascade not null,
-  content text not null,
+  content vault.encrypted_secret not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -199,7 +255,28 @@ create policy "Participants can insert chat messages." on public.chat_messages f
 );
 
 -- ============================================
--- 8. INDEXES FOR PERFORMANCE
+-- 8. ENCRYPTION SETUP (Application-Level Encryption)
+-- ============================================
+
+-- Enable the Vault extension
+create extension if not exists supabase_vault with schema vault;
+
+
+-- ============================================
+-- 8.1. VIEW FOR DECRYPTED CHAT MESSAGES
+-- ============================================
+create or replace view public.decrypted_chat_messages as
+  select
+    id,
+    room_id,
+    sender_id,
+    vault.decrypted_secret(content) as content,
+    created_at
+  from
+    public.chat_messages;
+
+-- ============================================
+-- 9. INDEXES FOR PERFORMANCE
 -- ============================================
 create index idx_appointments_patient on public.appointments(patient_id);
 create index idx_appointments_doctor on public.appointments(doctor_id);
